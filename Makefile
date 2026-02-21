@@ -162,6 +162,12 @@ docs: ## Build documentation with all features.
 		--no-deps \
 		--document-private-items
 
+##@ Benchmarks
+
+.PHONY: bench
+bench: ## Run all benchmarks.
+	cargo bench --workspace
+
 ##@ CI / PR
 
 .PHONY: pr
