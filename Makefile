@@ -139,6 +139,14 @@ deny: ## Run cargo-deny checks (advisories, bans, licenses, sources).
 audit: ## Run cargo-audit for vulnerabilities.
 	cargo audit
 
+.PHONY: check-no-test-deps
+check-no-test-deps: ## Ensure test-only deps don't leak into production.
+	@if cargo tree --workspace -e normal,build --no-default-features 2>/dev/null | grep -qE "arbitrary|proptest"; then \
+		echo "ERROR: Found test-only dependencies in non-dev dependency tree"; \
+		cargo tree --workspace -e normal,build --no-default-features | grep -E "arbitrary|proptest"; \
+		exit 1; \
+	fi
+
 ##@ Documentation
 
 .PHONY: docs
@@ -163,6 +171,7 @@ pr: ## Run all checks (deny + lint + test + docs).
 	$(MAKE) udeps && \
 	$(MAKE) hack && \
 	$(MAKE) zepter && \
+	$(MAKE) check-no-test-deps && \
 	$(MAKE) test && \
 	$(MAKE) docs
 
