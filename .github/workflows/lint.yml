@@ -113,6 +113,27 @@ jobs:
           persist-credentials: false
       - uses: dprint/check@v2.2
 
+  udeps:
+    name: udeps
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@nightly
+      - uses: rui314/setup-mold@v1
+      - uses: mozilla-actions/sccache-action@v0.0.9
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+      - uses: taiki-e/install-action@cargo-udeps
+      - run: cargo +nightly udeps --workspace --all-features
+        env:
+          RUSTC_WRAPPER: sccache
+
   lint-success:
     name: lint success
     runs-on: ubuntu-latest
@@ -124,6 +145,7 @@ jobs:
       - typos
       - deny
       - check-toml
+      - udeps
     timeout-minutes: 5
     steps:
       - uses: re-actors/alls-green@release/v1

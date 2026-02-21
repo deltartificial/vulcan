@@ -79,6 +79,10 @@ lint-toml: ensure-dprint ## Format all TOML files.
 lint-toml-check: ensure-dprint ## Check TOML formatting.
 	dprint check
 
+.PHONY: udeps
+udeps: ## Check for unused dependencies.
+	cargo +nightly udeps --workspace --all-features
+
 .PHONY: lint
 lint: ## Run ALL linters (fmt + clippy + typos + toml).
 	$(MAKE) fmt && \
@@ -138,6 +142,7 @@ docs: ## Build documentation with all features.
 pr: ## Run all checks (deny + lint + test + docs).
 	$(MAKE) deny && \
 	$(MAKE) lint && \
+	$(MAKE) udeps && \
 	$(MAKE) test && \
 	$(MAKE) docs
 
