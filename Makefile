@@ -87,6 +87,10 @@ udeps: ## Check for unused dependencies.
 hack: ## Check feature powerset with cargo-hack.
 	cargo hack check --workspace --feature-powerset --depth 2
 
+.PHONY: zepter
+zepter: ## Check feature propagation with zepter.
+	zepter run check
+
 .PHONY: lint
 lint: ## Run ALL linters (fmt + clippy + typos + toml).
 	$(MAKE) fmt && \
@@ -148,6 +152,7 @@ pr: ## Run all checks (deny + lint + test + docs).
 	$(MAKE) lint && \
 	$(MAKE) udeps && \
 	$(MAKE) hack && \
+	$(MAKE) zepter && \
 	$(MAKE) test && \
 	$(MAKE) docs
 
