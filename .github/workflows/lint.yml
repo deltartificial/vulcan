@@ -205,6 +205,25 @@ jobs:
           cache-on-failure: true
       - run: cargo check --workspace --target riscv32imac-unknown-none-elf
 
+  no-test-deps:
+    name: no test deps
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Ensure test-only dependencies do not leak into production
+        run: |
+          if cargo tree --workspace -e normal,build --no-default-features 2>/dev/null | grep -qE "arbitrary|proptest"; then
+            echo "::error::Found test-only dependencies (arbitrary/proptest) in non-dev dependency tree"
+            cargo tree --workspace -e normal,build --no-default-features | grep -E "arbitrary|proptest"
+            exit 1
+          fi
+
   lint-success:
     name: lint success
     runs-on: ubuntu-latest
@@ -221,6 +240,7 @@ jobs:
       - feature-propagation
       - wasm
       - riscv
+      - no-test-deps
     timeout-minutes: 5
     steps:
       - uses: re-actors/alls-green@release/v1
