@@ -1,0 +1,31 @@
+# Limit large types on the stack
+too-large-for-stack = 128
+
+# Valid identifiers for doc_markdown lint
+doc-valid-idents = [
+    "P2P",
+    "IPv4",
+    "IPv6",
+    "KiB",
+    "MiB",
+    "GiB",
+    "TiB",
+    "WebSocket",
+    "WebSockets",
+    "MessagePack",
+    "EVM",
+]
+
+# Allow dbg! in tests only
+allow-dbg-in-tests = true
+
+# Types with interior mutability to ignore
+ignore-interior-mutability = ["bytes::Bytes"]
+
+# Disallow direct print macros — enforce tracing usage
+disallowed-macros = [
+    { path = "std::print", reason = "use `tracing` macros instead" },
+    { path = "std::eprint", reason = "use `tracing` macros instead" },
+    { path = "std::println", reason = "use `tracing` macros instead" },
+    { path = "std::eprintln", reason = "use `tracing` macros instead" },
+]

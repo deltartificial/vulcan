@@ -1,0 +1,205 @@
+[workspace]
+members = []
+resolver = "3"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.93"
+authors = ["Vulcan Contributors"]
+license = "MIT OR Apache-2.0"
+homepage = "https://github.com/vulcan"
+repository = "https://github.com/vulcan"
+exclude = [".github/"]
+
+# ============================================================================
+# LINTS
+# ============================================================================
+
+[workspace.lints.rust]
+missing_debug_implementations = "warn"
+missing_docs = "warn"
+rust_2018_idioms = { level = "deny", priority = -1 }
+unreachable_pub = "warn"
+unused_must_use = "deny"
+redundant_imports = "warn"
+redundant_lifetimes = "warn"
+rust_2024_incompatible_pat = "warn"
+unnameable_types = "warn"
+
+[workspace.lints.rustdoc]
+all = "warn"
+
+[workspace.lints.clippy]
+# Nursery lints enabled
+borrow_as_ptr = "warn"
+branches_sharing_code = "warn"
+clear_with_drain = "warn"
+cloned_instead_of_copied = "warn"
+collection_is_never_read = "warn"
+dbg_macro = "warn"
+derive_partial_eq_without_eq = "warn"
+doc_markdown = "warn"
+empty_line_after_doc_comments = "warn"
+empty_line_after_outer_attr = "warn"
+enum_glob_use = "warn"
+equatable_if_let = "warn"
+explicit_into_iter_loop = "warn"
+explicit_iter_loop = "warn"
+flat_map_option = "warn"
+from_iter_instead_of_collect = "warn"
+if_not_else = "warn"
+if_then_some_else_none = "warn"
+implicit_clone = "warn"
+imprecise_flops = "warn"
+iter_on_empty_collections = "warn"
+iter_on_single_items = "warn"
+iter_with_drain = "warn"
+iter_without_into_iter = "warn"
+large_stack_frames = "warn"
+manual_assert = "warn"
+manual_clamp = "warn"
+manual_is_variant_and = "warn"
+manual_string_new = "warn"
+match_same_arms = "warn"
+missing_const_for_fn = "warn"
+mutex_integer = "warn"
+naive_bytecount = "warn"
+needless_bitwise_bool = "warn"
+needless_continue = "warn"
+needless_for_each = "warn"
+needless_pass_by_ref_mut = "warn"
+nonstandard_macro_braces = "warn"
+option_as_ref_cloned = "warn"
+or_fun_call = "warn"
+path_buf_push_overwrite = "warn"
+read_zero_byte_vec = "warn"
+redundant_clone = "warn"
+redundant_else = "warn"
+single_char_pattern = "warn"
+string_lit_as_bytes = "warn"
+string_lit_chars_any = "warn"
+suboptimal_flops = "warn"
+suspicious_operation_groupings = "warn"
+trailing_empty_array = "warn"
+trait_duplication_in_bounds = "warn"
+transmute_undefined_repr = "warn"
+trivial_regex = "warn"
+tuple_array_conversions = "warn"
+type_repetition_in_bounds = "warn"
+uninhabited_references = "warn"
+uninlined_format_args = "warn"
+unnecessary_self_imports = "warn"
+unnecessary_struct_initialization = "warn"
+unnested_or_patterns = "warn"
+unused_peekable = "warn"
+unused_rounding = "warn"
+use_self = "warn"
+useless_let_if_seq = "warn"
+while_float = "warn"
+zero_sized_map_values = "warn"
+
+# Explicitly allowed (too many false positives)
+result_large_err = "allow"
+as_ptr_cast_mut = "allow"
+cognitive_complexity = "allow"
+debug_assert_with_mut_call = "allow"
+fallible_impl_from = "allow"
+future_not_send = "allow"
+needless_collect = "allow"
+non_send_fields_in_send_ty = "allow"
+redundant_pub_crate = "allow"
+significant_drop_in_scrutinee = "allow"
+significant_drop_tightening = "allow"
+too_long_first_doc_paragraph = "allow"
+octal_escapes = "allow"
+literal_string_with_formatting_args = "allow"
+
+# ============================================================================
+# BUILD PROFILES
+# ============================================================================
+
+# Fast dev builds with minimal debug info
+[profile.dev]
+debug = "line-tables-only"
+split-debuginfo = "unpacked"
+
+# Optimize heavy dependencies even in dev builds
+# (Cargo silently ignores crates not in the dependency graph)
+[profile.dev.package]
+serde_json.opt-level = 3
+serde.opt-level = 3
+clap.opt-level = 3
+clap_builder.opt-level = 3
+clap_lex.opt-level = 3
+sha2.opt-level = 3
+sha3.opt-level = 3
+proptest.opt-level = 3
+rand.opt-level = 3
+rand_chacha.opt-level = 3
+rayon.opt-level = 3
+rayon-core.opt-level = 3
+regex.opt-level = 3
+regex-syntax.opt-level = 3
+regex-automata.opt-level = 3
+hashbrown.opt-level = 3
+foldhash.opt-level = 3
+
+# Integration tests: optimized but with debug assertions
+[profile.hivetests]
+inherits = "test"
+opt-level = 3
+lto = "thin"
+
+# Release: optimized, stripped, abort on panic
+[profile.release]
+opt-level = 3
+lto = "thin"
+debug = "none"
+strip = "symbols"
+panic = "abort"
+codegen-units = 16
+
+# Release: optimize cold crates for size
+# (Cargo silently ignores crates not in the dependency graph)
+[profile.release.package]
+syn.opt-level = "s"
+prettyplease.opt-level = "s"
+reqwest.opt-level = "s"
+hyper.opt-level = "s"
+hyper-util.opt-level = "s"
+rustls.opt-level = "s"
+tower.opt-level = "s"
+tower-http.opt-level = "s"
+clap_builder.opt-level = "s"
+clap_complete.opt-level = "s"
+toml_edit.opt-level = "s"
+toml.opt-level = "s"
+
+# Profiling: release with debug symbols
+[profile.profiling]
+inherits = "release"
+debug = "full"
+strip = "none"
+
+# Bench: inherits profiling
+[profile.bench]
+inherits = "profiling"
+
+# Max perf: most aggressive (distribution, final binary)
+[profile.maxperf]
+inherits = "release"
+lto = "fat"
+codegen-units = 1
+
+# ============================================================================
+# WORKSPACE DEPENDENCIES
+# ============================================================================
+
+[workspace.dependencies]
+# Add your workspace dependencies here
+# test
+
+[workspace.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]

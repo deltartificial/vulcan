@@ -1,0 +1,10 @@
+[alias]
+docs = "doc --workspace --all-features --no-deps"
+x = "run --package vulcan-xtask --"
+xtask = "run --package vulcan-xtask --"
+
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-Clink-arg=/STACK:10000000"]
+
+[target.i686-pc-windows-msvc]
+rustflags = ["-Clink-arg=/STACK:10000000"]
