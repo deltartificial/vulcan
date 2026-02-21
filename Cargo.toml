@@ -1,5 +1,6 @@
 [workspace]
 members = []
+default-members = []
 resolver = "3"
 
 [workspace.package]
@@ -8,8 +9,8 @@ edition = "2024"
 rust-version = "1.93"
 authors = ["Vulcan Contributors"]
 license = "MIT OR Apache-2.0"
-homepage = "https://github.com/vulcan"
-repository = "https://github.com/vulcan"
+homepage = "https://github.com/deltartificial/vulcan"
+repository = "https://github.com/deltartificial/vulcan"
 exclude = [".github/"]
 
 # ============================================================================
@@ -151,13 +152,13 @@ inherits = "test"
 opt-level = 3
 lto = "thin"
 
-# Release: optimized, stripped, abort on panic
+# Release: optimized, stripped, unwind for graceful error handling
 [profile.release]
 opt-level = 3
 lto = "thin"
 debug = "none"
-strip = "symbols"
-panic = "abort"
+strip = "debuginfo"
+panic = "unwind"
 codegen-units = 16
 
 # Release: optimize cold crates for size
@@ -190,6 +191,8 @@ inherits = "profiling"
 [profile.maxperf]
 inherits = "release"
 lto = "fat"
+strip = "symbols"
+panic = "abort"
 codegen-units = 1
 
 # ============================================================================
