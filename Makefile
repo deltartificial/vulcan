@@ -119,6 +119,16 @@ test-coverage: ## Run tests with coverage (requires cargo-llvm-cov).
 	cargo +nightly llvm-cov report --html
 	@echo "Coverage report: target/llvm-cov/html/index.html"
 
+##@ Cross-compilation
+
+.PHONY: check-wasm
+check-wasm: ## Check compilation for wasm32-wasip1 target.
+	cargo check --workspace --target wasm32-wasip1
+
+.PHONY: check-riscv
+check-riscv: ## Check compilation for riscv32imac-unknown-none-elf target.
+	cargo check --workspace --target riscv32imac-unknown-none-elf
+
 ##@ Security & Dependencies
 
 .PHONY: deny
