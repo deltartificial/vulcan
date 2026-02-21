@@ -83,6 +83,10 @@ lint-toml-check: ensure-dprint ## Check TOML formatting.
 udeps: ## Check for unused dependencies.
 	cargo +nightly udeps --workspace --all-features
 
+.PHONY: hack
+hack: ## Check feature powerset with cargo-hack.
+	cargo hack check --workspace --feature-powerset --depth 2
+
 .PHONY: lint
 lint: ## Run ALL linters (fmt + clippy + typos + toml).
 	$(MAKE) fmt && \
@@ -143,6 +147,7 @@ pr: ## Run all checks (deny + lint + test + docs).
 	$(MAKE) deny && \
 	$(MAKE) lint && \
 	$(MAKE) udeps && \
+	$(MAKE) hack && \
 	$(MAKE) test && \
 	$(MAKE) docs
 

@@ -134,6 +134,27 @@ jobs:
         env:
           RUSTC_WRAPPER: sccache
 
+  features:
+    name: features
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: rui314/setup-mold@v1
+      - uses: mozilla-actions/sccache-action@v0.0.9
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+      - uses: taiki-e/install-action@cargo-hack
+      - run: cargo hack check --workspace --feature-powerset --depth 2
+        env:
+          RUSTC_WRAPPER: sccache
+
   lint-success:
     name: lint success
     runs-on: ubuntu-latest
@@ -146,6 +167,7 @@ jobs:
       - deny
       - check-toml
       - udeps
+      - features
     timeout-minutes: 5
     steps:
       - uses: re-actors/alls-green@release/v1
