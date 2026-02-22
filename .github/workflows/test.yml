@@ -80,6 +80,28 @@ jobs:
         env:
           RUSTC_WRAPPER: sccache
 
+  minimal-versions:
+    name: minimal versions
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@nightly
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: rui314/setup-mold@v1
+      - uses: mozilla-actions/sccache-action@v0.0.9
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+      - run: cargo +nightly update -Z minimal-versions
+      - run: cargo +stable check --workspace --all-features
+        env:
+          RUSTC_WRAPPER: sccache
+
   test-success:
     name: test success
     runs-on: ubuntu-latest
@@ -88,6 +110,7 @@ jobs:
       - test
       - doctest
       - msrv
+      - minimal-versions
     timeout-minutes: 5
     steps:
       - uses: re-actors/alls-green@release/v1
