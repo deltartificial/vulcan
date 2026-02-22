@@ -1,5 +1,6 @@
 {
   "$schema": "https://raw.githubusercontent.com/dprint/dprint/refs/heads/main/website/src/assets/schemas/v0.json",
+  "lineWidth": 100,
   "indentWidth": 2,
   "useTabs": false,
   "excludes": [
@@ -7,6 +8,7 @@
     "**/node_modules",
     "testdata/**",
     "test-data/**",
+    "bench_data/**",
     "**/tests/**",
     "Cargo.lock"
   ],
@@ -15,8 +17,18 @@
     "https://plugins.dprint.dev/json-0.21.0.wasm",
     "https://plugins.dprint.dev/markdown-0.20.0.wasm",
     "https://plugins.dprint.dev/dockerfile-0.3.3.wasm",
-    "https://plugins.dprint.dev/g-plane/pretty_yaml-v0.5.1.wasm"
+    "https://plugins.dprint.dev/g-plane/pretty_yaml-v0.5.1.wasm",
+    "https://plugins.dprint.dev/exec-0.6.0.wasm"
   ],
+  "exec": {
+    "commands": [
+      {
+        "command": "rustfmt --edition 2024 --config imports_granularity=Crate",
+        "exts": ["rs"],
+        "cacheKeyFiles": ["rustfmt.toml", "rust-toolchain.toml"]
+      }
+    ]
+  },
   "toml": {
     "lineWidth": 100,
     "useTabs": false,
@@ -27,7 +39,7 @@
     "textWrap": "maintain"
   },
   "json": {
-    "lineWidth": 1,
+    "lineWidth": 100,
     "indentWidth": 2,
     "useTabs": false,
     "trailingCommas": "never",
