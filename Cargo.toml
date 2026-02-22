@@ -137,6 +137,15 @@ print_stderr = "warn"
 str_to_string = "warn"
 rc_buffer = "warn"
 
+# TIER 1: Critical enforcement (restriction group)
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "warn"
+unimplemented = "warn"
+clone_on_ref_ptr = "warn"
+missing_assert_message = "warn"
+allow_attributes_without_reason = "warn"
+
 # Explicitly allowed (too many false positives)
 len_without_is_empty = "allow"
 new_ret_no_self = "allow"
