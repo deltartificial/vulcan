@@ -11,9 +11,9 @@ homepage.workspace = true
 [lib]
 doctest = true
 
-[lints]
-workspace = true
-
 [dependencies]
 
 [dev-dependencies]
+
+[lints]
+workspace = true
