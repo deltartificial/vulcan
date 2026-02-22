@@ -146,6 +146,19 @@ clone_on_ref_ptr = "warn"
 missing_assert_message = "warn"
 allow_attributes_without_reason = "warn"
 
+# TIER 2: Best practices (restriction + pedantic)
+wildcard_enum_match_arm = "warn"
+map_err_ignore = "warn"
+let_underscore_must_use = "warn"
+tests_outside_test_module = "warn"
+shadow_reuse = "warn"
+shadow_same = "warn"
+empty_drop = "warn"
+deref_by_slicing = "warn"
+create_dir = "warn"
+checked_conversions = "warn"
+default_trait_access = "warn"
+
 # Explicitly allowed (too many false positives)
 len_without_is_empty = "allow"
 new_ret_no_self = "allow"
