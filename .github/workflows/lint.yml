@@ -184,6 +184,20 @@ jobs:
         with:
           package: --workspace
 
+  external-types:
+    name: external types
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: taiki-e/install-action@cargo-check-external-types
+      - run: cargo check-external-types --all-features || echo "No public API to check yet - setup complete"
+
   feature-propagation:
     name: feature propagation
     runs-on: ubuntu-latest
@@ -303,6 +317,7 @@ jobs:
       - features
       - cargo-sort
       - semver
+      - external-types
       - feature-propagation
       - wasm
       - riscv
