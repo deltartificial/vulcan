@@ -32,6 +32,13 @@ unnameable_types = "warn"
 all = "warn"
 
 [workspace.lints.clippy]
+# Lint groups (applied first with priority)
+correctness = { level = "deny", priority = -1 }
+perf = { level = "deny", priority = -1 }
+complexity = { level = "warn", priority = -1 }
+style = { level = "warn", priority = -1 }
+suspicious = { level = "warn", priority = -1 }
+
 # Nursery lints enabled
 borrow_as_ptr = "warn"
 branches_sharing_code = "warn"
