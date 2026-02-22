@@ -1,6 +1,6 @@
 [workspace]
-members = []
-default-members = []
+members = ["vulcan"]
+default-members = ["vulcan"]
 resolver = "3"
 
 [workspace.package]
