@@ -169,6 +169,21 @@ jobs:
       - run: cargo install cargo-sort --locked
       - run: cargo sort --check --workspace
 
+  semver:
+    name: semver
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: obi1kenobi/cargo-semver-checks-action@v2
+        with:
+          package: --workspace
+
   feature-propagation:
     name: feature propagation
     runs-on: ubuntu-latest
@@ -270,6 +285,7 @@ jobs:
       - udeps
       - features
       - cargo-sort
+      - semver
       - feature-propagation
       - wasm
       - riscv
