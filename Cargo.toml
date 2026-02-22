@@ -32,6 +32,7 @@ explicit_outlives_requirements = "warn"
 unsafe_op_in_unsafe_fn = "warn"
 unused_extern_crates = "warn"
 unused_lifetimes = "warn"
+unexpected_cfgs = "warn"
 
 [workspace.lints.rustdoc]
 all = "warn"
@@ -130,6 +131,11 @@ rest_pat_in_fully_bound_structs = "warn"
 return_self_not_must_use = "warn"
 single_match_else = "warn"
 verbose_file_reads = "warn"
+todo = "warn"
+print_stdout = "warn"
+print_stderr = "warn"
+str_to_string = "warn"
+rc_buffer = "warn"
 
 # Explicitly allowed (too many false positives)
 len_without_is_empty = "allow"
