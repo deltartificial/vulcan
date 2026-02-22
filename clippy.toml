@@ -38,3 +38,14 @@ check-inconsistent-struct-field-initializers = true
 
 # Flag commented-out code
 lint-commented-code = true
+
+# Disallow std HashMap/HashSet — enforce faster alternatives
+disallowed-types = [
+    { path = "std::collections::HashMap", reason = "use `foldhash::HashMap` or `rustc_hash::FxHashMap` for better performance" },
+    { path = "std::collections::HashSet", reason = "use `foldhash::HashSet` or `rustc_hash::FxHashSet` for better performance" },
+]
+
+# Disallow std::env::var — enforce explicit error handling
+disallowed-methods = [
+    { path = "std::env::var", reason = "use `std::env::var_os` with explicit error handling or a config module" },
+]
