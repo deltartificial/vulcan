@@ -179,6 +179,18 @@ octal_escapes = "allow"
 literal_string_with_formatting_args = "allow"
 
 # ============================================================================
+# WORKSPACE DEPENDENCIES
+# ============================================================================
+
+[workspace.dependencies]
+# Add your workspace dependencies here
+# test
+
+[workspace.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+# ============================================================================
 # BUILD PROFILES
 # ============================================================================
 
@@ -256,15 +268,3 @@ lto = "fat"
 strip = "symbols"
 panic = "abort"
 codegen-units = 1
-
-# ============================================================================
-# WORKSPACE DEPENDENCIES
-# ============================================================================
-
-[workspace.dependencies]
-# Add your workspace dependencies here
-# test
-
-[workspace.metadata.docs.rs]
-all-features = true
-rustdoc-args = ["--cfg", "docsrs"]
