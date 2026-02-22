@@ -13,8 +13,8 @@ yanked = "warn"
 # BANS
 # ============================================================================
 [bans]
-multiple-versions = "warn"
-wildcards = "allow"
+multiple-versions = "deny"
+wildcards = "deny"
 highlight = "all"
 deny = [{ name = "openssl" }]
 skip = []
