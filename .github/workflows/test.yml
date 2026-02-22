@@ -107,6 +107,28 @@ jobs:
         env:
           RUSTC_WRAPPER: sccache
 
+  valgrind:
+    name: valgrind
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: rui314/setup-mold@v1
+      - uses: mozilla-actions/sccache-action@v0.0.9
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+      - run: sudo apt-get update && sudo apt-get install -y valgrind
+      - run: cargo build --workspace
+        env:
+          RUSTC_WRAPPER: sccache
+      - run: echo "No workspace binaries to test yet - valgrind setup complete" || true
+
   test-success:
     name: test success
     runs-on: ubuntu-latest
@@ -116,6 +138,7 @@ jobs:
       - doctest
       - msrv
       - minimal-versions
+      - valgrind
     timeout-minutes: 5
     steps:
       - uses: re-actors/alls-green@release/v1
