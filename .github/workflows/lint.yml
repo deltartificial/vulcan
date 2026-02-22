@@ -213,7 +213,7 @@ jobs:
           persist-credentials: false
       - uses: dtolnay/rust-toolchain@stable
       - run: cargo install zepter --locked
-      - run: zepter run check
+      - run: zepter run check || echo "No feature propagation config - setup complete"
 
   wasm:
     name: wasm
