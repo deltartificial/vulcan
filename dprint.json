@@ -17,18 +17,8 @@
     "https://plugins.dprint.dev/json-0.21.0.wasm",
     "https://plugins.dprint.dev/markdown-0.20.0.wasm",
     "https://plugins.dprint.dev/dockerfile-0.3.3.wasm",
-    "https://plugins.dprint.dev/g-plane/pretty_yaml-v0.5.1.wasm",
-    "https://plugins.dprint.dev/exec-0.6.0.wasm"
+    "https://plugins.dprint.dev/g-plane/pretty_yaml-v0.5.1.wasm"
   ],
-  "exec": {
-    "commands": [
-      {
-        "command": "rustfmt --edition 2024 --config imports_granularity=Crate",
-        "exts": ["rs"],
-        "cacheKeyFiles": ["rustfmt.toml", "rust-toolchain.toml"]
-      }
-    ]
-  },
   "toml": {
     "lineWidth": 100,
     "useTabs": false,

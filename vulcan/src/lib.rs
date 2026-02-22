@@ -16,7 +16,7 @@
 /// assert_eq!(add(2, 3), 5);
 /// ```
 #[must_use]
-pub fn add(left: u64, right: u64) -> u64 {
+pub const fn add(left: u64, right: u64) -> u64 {
     left + right
 }
 
@@ -30,7 +30,7 @@ pub fn add(left: u64, right: u64) -> u64 {
 /// assert_eq!(multiply(4, 5), 20);
 /// ```
 #[must_use]
-pub fn multiply(left: u64, right: u64) -> u64 {
+pub const fn multiply(left: u64, right: u64) -> u64 {
     left * right
 }
 
