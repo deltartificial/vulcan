@@ -29,3 +29,12 @@ disallowed-macros = [
     { path = "std::println", reason = "use `tracing` macros instead" },
     { path = "std::eprintln", reason = "use `tracing` macros instead" },
 ]
+
+# Allow breaking exported API during development
+avoid-breaking-exported-api = false
+
+# Enforce consistent struct field initialization order
+check-inconsistent-struct-field-initializers = true
+
+# Flag commented-out code
+lint-commented-code = true
