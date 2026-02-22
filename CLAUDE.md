@@ -62,6 +62,7 @@ Breaking changes: append `!` after type, e.g. `feat!: remove deprecated API`
 ## Architecture
 
 Rust workspace with strict tooling:
+
 - **clippy** (nightly, nursery lints enabled)
 - **rustfmt** (nightly, `imports_granularity = "Crate"`)
 - **cargo-deny** (license auditing, ban openssl)
@@ -73,6 +74,7 @@ Rust workspace with strict tooling:
 ## CI
 
 CI runs on every PR and push to main:
+
 - **lint.yml**: clippy, fmt, docs, typos, deny, dprint, with `lint-success` gate
 - **test.yml**: nextest, doctest, MSRV (1.93) check, with `test-success` gate
 - **pr-title.yml**: conventional commit enforcement on PR titles
