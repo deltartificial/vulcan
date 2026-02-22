@@ -129,6 +129,25 @@ jobs:
           RUSTC_WRAPPER: sccache
       - run: echo "No workspace binaries to test yet - valgrind setup complete" || true
 
+  asan:
+    name: asan
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@nightly
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+      - run: cargo +nightly test --workspace --target x86_64-unknown-linux-gnu
+        env:
+          RUSTFLAGS: -Zsanitizer=address
+          RUSTDOCFLAGS: -Zsanitizer=address
+
   test-success:
     name: test success
     runs-on: ubuntu-latest
@@ -139,6 +158,7 @@ jobs:
       - msrv
       - minimal-versions
       - valgrind
+      - asan
     timeout-minutes: 5
     steps:
       - uses: re-actors/alls-green@release/v1
