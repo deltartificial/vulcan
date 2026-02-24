@@ -127,4 +127,6 @@ disallowed-types = [
 disallowed-methods = [
   { path = "std::env::var", reason = "use `std::env::var_os` with explicit error handling or a config module" },
   { path = "std::mem::drop", reason = "use `_ = expr` to explicitly discard a #[must_use] value; use a scope block to drop a guard early" },
+  { path = "core::option::Option::unwrap_or", reason = "use `map_or`, `if let`/`let-else`, or propagate with `?`" },
+  { path = "core::result::Result::unwrap_or", reason = "use `map_or`, `if let`/`let-else`, or propagate with `?`" },
 ]
