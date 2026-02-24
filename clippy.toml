@@ -126,4 +126,5 @@ disallowed-types = [
 # Enforce explicit error handling
 disallowed-methods = [
   { path = "std::env::var", reason = "use `std::env::var_os` with explicit error handling or a config module" },
+  { path = "std::mem::drop", reason = "use `_ = expr` to explicitly discard a #[must_use] value; use a scope block to drop a guard early" },
 ]
