@@ -53,6 +53,11 @@ mod backend {
 
 pub use backend::Allocator;
 
+// With both features enabled (`--all-features`), jemalloc wins and `mimalloc` would be reported
+// as an unused dependency.
+#[cfg(all(feature = "mimalloc", feature = "jemalloc", not(target_env = "msvc")))]
+use mimalloc as _;
+
 /// Returns the allocator selected by the enabled features.
 ///
 /// `const` so it can initialize a `#[global_allocator]` static.
