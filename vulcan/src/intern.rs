@@ -2,8 +2,8 @@
 //!
 //! Interning stores each distinct value once and hands out a small handle. Comparing or hashing
 //! two handles is then a single integer or pointer operation, whatever the size of the value.
-//! Solar interns every identifier into a 4-byte `Symbol`, and its types into pointer-identity
-//! handles.
+//! Compilers typically intern every identifier into a 4-byte `Symbol`, and their types into
+//! pointer-identity handles.
 //!
 //! - [`Symbol`] and [`Interner`]: string interning with `u32` handles.
 //! - [`Interned`]: a reference whose equality and hash use the address, for values interned in an
@@ -130,7 +130,7 @@ impl Interner {
 /// references to equal values are then the same pointer, and comparing them never reads the
 /// value. Ordering still falls back to the value, since addresses carry no meaningful order.
 ///
-/// Ported from `rustc_data_structures::intern::Interned` through Solar.
+/// Modeled on `rustc_data_structures::intern::Interned`.
 pub struct Interned<'a, T>(&'a T);
 
 impl<'a, T> Interned<'a, T> {
