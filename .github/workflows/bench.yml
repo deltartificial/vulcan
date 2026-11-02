@@ -1,8 +1,13 @@
 name: bench
 
+# CodSpeed runs the benchmarks under instruction counting, which is deterministic enough to
+# compare a pull request against `main` and comment the diff. Requires the repository to be
+# enabled on codspeed.io (OIDC, no token secret needed for public repositories).
+
 on:
   push:
     branches: [main]
+  pull_request:
   workflow_dispatch:
 
 permissions: {}
@@ -16,22 +21,27 @@ env:
   RUST_BACKTRACE: 1
 
 jobs:
-  bench:
-    name: bench
+  codspeed:
+    name: codspeed
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:
       contents: read
+      id-token: write
     steps:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
       - uses: dtolnay/rust-toolchain@stable
       - uses: rui314/setup-mold@v1
-      - uses: mozilla-actions/sccache-action@v0.0.9
       - uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
-      - run: cargo bench --workspace
-        env:
-          RUSTC_WRAPPER: sccache
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-codspeed
+      - run: cargo codspeed build --workspace
+      - uses: CodSpeedHQ/action@v4
+        with:
+          mode: instrumentation
+          run: cargo codspeed run --workspace
