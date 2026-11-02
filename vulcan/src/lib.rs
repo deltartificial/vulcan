@@ -7,6 +7,7 @@
 #![warn(missing_docs)]
 
 pub mod alloc;
+pub mod arena;
 
 /// Adds two numbers together.
 ///

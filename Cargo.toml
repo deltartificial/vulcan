@@ -185,8 +185,11 @@ manual_unwrap_or = "allow"
 # ============================================================================
 
 [workspace.dependencies]
+# arenas
+bumpalo = "3.20.3"
 # allocators
 mimalloc = { version = "0.1.52", default-features = false }
+thread_local = "1.1.10"
 tikv-jemallocator = "0.7.0"
 
 [workspace.metadata.docs.rs]

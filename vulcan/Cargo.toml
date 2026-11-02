@@ -21,11 +21,13 @@ mimalloc = ["dep:mimalloc"]
 # Ignored on MSVC targets, where jemalloc does not build.
 jemalloc = ["dep:tikv-jemallocator"]
 
-[dependencies]
-mimalloc = { workspace = true, optional = true }
-
 [target.'cfg(not(target_env = "msvc"))'.dependencies]
 tikv-jemallocator = { workspace = true, optional = true }
+
+[dependencies]
+bumpalo.workspace = true
+mimalloc = { workspace = true, optional = true }
+thread_local.workspace = true
 
 [dev-dependencies]
 
