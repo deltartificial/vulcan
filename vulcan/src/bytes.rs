@@ -1,7 +1,7 @@
 //! Byte-level scanning: table-driven classification and SIMD searches.
 //!
-//! Solar's lexer works on bytes, not `char`s. It classifies each byte with a single load from a
-//! 256-entry table instead of a chain of range comparisons, and jumps over comments with
+//! Fast lexers work on bytes, not `char`s. They classify each byte with a single load from a
+//! 256-entry table instead of a chain of range comparisons, and jump over comments with
 //! `memchr`/`memmem`, which use SIMD where available. This module packages both techniques for
 //! any hand-written scanner.
 //!
