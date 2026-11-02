@@ -8,6 +8,7 @@
 
 pub mod alloc;
 pub mod arena;
+pub mod hint;
 pub mod index;
 pub mod intern;
 pub mod layout;
