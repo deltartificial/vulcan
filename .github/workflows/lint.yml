@@ -305,6 +305,30 @@ jobs:
       - run: cargo install cargo-fuzz
       - run: cargo fuzz build --fuzz-dir fuzz || echo "No fuzz targets yet - setup complete"
 
+  nightly-cfg:
+    name: nightly cfg
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    env:
+      RUSTFLAGS: --cfg vulcan_nightly -Dwarnings
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: clippy
+      - uses: rui314/setup-mold@v1
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+      - uses: taiki-e/install-action@nextest
+      - run: cargo clippy --workspace --all-targets --all-features --no-deps
+      - run: cargo nextest run --workspace --all-features
+      - run: cargo test --doc --workspace --all-features
+
   lint-success:
     name: lint success
     runs-on: ubuntu-latest
@@ -327,6 +351,7 @@ jobs:
       - no-test-deps
       - miri
       - fuzzing
+      - nightly-cfg
     timeout-minutes: 5
     steps:
       - uses: re-actors/alls-green@release/v1

@@ -4,7 +4,19 @@
 //! and ensure CI workflows execute successfully.
 
 #![forbid(unsafe_code)]
+// Nightly-only fast paths, enabled with `RUSTFLAGS="--cfg vulcan_nightly"`. A `--cfg` flag rather
+// than a Cargo feature, so `--all-features` builds keep working on stable.
+#![cfg_attr(vulcan_nightly, feature(likely_unlikely))]
 #![warn(missing_docs)]
+
+pub mod alloc;
+pub mod arena;
+pub mod bytes;
+pub mod hint;
+pub mod index;
+pub mod intern;
+pub mod layout;
+pub mod sync;
 
 /// Adds two numbers together.
 ///
