@@ -1,12 +1,12 @@
 //! Compile-time size budgets and compact source spans.
 //!
 //! Hot types are copied, stored in vectors and passed in registers; a few extra bytes multiply
-//! across millions of nodes and push data out of cache. Solar pins the size of every AST node in a
-//! test, so growth becomes a review decision instead of a silent regression. Vulcan does the same
+//! across millions of nodes and push data out of cache. Pinning the size of hot types makes
+//! growth becomes a review decision instead of a silent regression. Vulcan does it
 //! at compile time with [`static_assert_size!`](crate::static_assert_size): the build fails as
 //! soon as a pinned type changes size.
 //!
-//! [`Span`] follows Solar's layout: two `u32` offsets packed into one `u64`, so a span travels in
+//! [`Span`] packs two `u32` offsets packed into one `u64`, so a span travels in
 //! a single register and derived comparisons are a single integer comparison.
 
 use std::{fmt, ops::Range};
