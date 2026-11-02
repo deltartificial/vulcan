@@ -15,8 +15,7 @@
 //! ```
 //!
 //! Allocation-heavy workloads (parsers, graph builders) commonly gain 5 to 20 percent from
-//! `mimalloc` or `jemalloc` over the system allocator, which is why Solar enables `mimalloc` by
-//! default in its binary.
+//! `mimalloc` or `jemalloc` over the system allocator.
 //!
 //! Precedence when several features are enabled: `jemalloc`, then `mimalloc`, then
 //! [`System`](std::alloc::System). `jemalloc` is ignored on MSVC targets.
