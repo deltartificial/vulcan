@@ -677,6 +677,7 @@ dependencies = [
  "parking_lot",
  "rayon",
  "rustc-hash",
+ "smallvec",
  "thread_local",
  "tikv-jemallocator",
 ]

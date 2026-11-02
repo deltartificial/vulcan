@@ -12,10 +12,14 @@
 pub mod alloc;
 pub mod arena;
 pub mod bytes;
+pub mod cache;
+pub mod collect;
+pub mod diag;
 pub mod hint;
 pub mod index;
 pub mod intern;
 pub mod layout;
+pub mod never;
 pub mod sync;
 
 /// Adds two numbers together.

@@ -194,7 +194,8 @@ memchr = "2.8.3" # bytes
 mimalloc = { version = "0.1.52", default-features = false } # alloc
 parking_lot = "0.12.5" # sync; 0.13 requires rustc 1.95, above the 1.93 MSRV
 rayon = "1.12.0" # sync
-rustc-hash = "2.1.3" # intern
+rustc-hash = "2.1.3" # intern, sync, cache
+smallvec = { version = "1.15.1", features = ["const_generics", "union"] } # collect
 thread_local = "1.1.10" # arena
 tikv-jemallocator = "0.7.0" # alloc
 
