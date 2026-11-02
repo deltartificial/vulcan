@@ -1,10 +1,10 @@
 # Vulcan
 
-Ultra-strict Rust workspace template for AI-assisted development.
+Ultra-strict, performance-first Rust workspace template for AI-assisted development.
 
 ## Philosophy
 
-Traditional Rust projects balance strictness with flexibility. Vulcan enforces a single correct pattern to prevent AI from generating inconsistent code.
+Traditional Rust projects balance strictness with flexibility. Vulcan enforces a single correct pattern to prevent AI from generating inconsistent code, and ships the building blocks to make that code fast.
 
 Key principles:
 
@@ -13,8 +13,10 @@ Key principles:
 - Require fast alternatives (`parking_lot::Mutex`, `foldhash::HashMap`)
 - Enforce exhaustive pattern matching and explicit error handling
 - Use `tracing` instead of `println!` for logging
+- Allocate less, keep types small, keep the hot path hot, parallelize deterministically
+- No `unsafe`: the `vulcan` crate is `#![forbid(unsafe_code)]`
 
-Target use case: AI code generation where flexibility leads to bugs and inconsistent patterns.
+Target use case: AI code generation where flexibility leads to bugs, inconsistent patterns and slow code.
 
 ## Quick Start
 
@@ -45,15 +47,44 @@ too-many-lines-threshold = 75 # Default: 100
 
 ### Disallowed Types
 
-- `std::sync::Mutex` → `parking_lot::Mutex` (1.5x faster, no poisoning)
-- `std::sync::RwLock` → `parking_lot::RwLock` (5x faster)
-- `std::collections::HashMap` → `foldhash::HashMap` or `rustc_hash::FxHashMap`
-- `std::collections::LinkedList` → `Vec` or `VecDeque`
+| Banned                         | Use instead                                      |
+| ------------------------------ | ------------------------------------------------ |
+| `std::sync::Mutex`             | `parking_lot::Mutex` (1.5x faster, no poisoning) |
+| `std::sync::RwLock`            | `parking_lot::RwLock` (5x faster)                |
+| `std::collections::HashMap`    | `foldhash::HashMap` or `rustc_hash::FxHashMap`   |
+| `std::collections::LinkedList` | `Vec` or `VecDeque`                              |
 
 ### Disallowed Methods and Macros
 
-- `std::env::var` → `std::env::var_os` (explicit error handling)
-- `println!`, `eprintln!` → `tracing::info!`, `tracing::error!`
+| Banned                                   | Use instead                                  |
+| ---------------------------------------- | -------------------------------------------- |
+| `std::env::var`                          | `std::env::var_os` (explicit error handling) |
+| `Option::unwrap_or`, `Result::unwrap_or` | `map_or`, `let`-`else`, or `?`               |
+| `std::mem::drop`                         | `_ = expr`, or a scope block for guards      |
+| `println!`, `eprintln!`                  | `tracing::info!`, `tracing::error!`          |
+
+## Performance
+
+The `vulcan` crate is a toolbox of safe, benchmarked building blocks. See [docs/PERFORMANCE.md](docs/PERFORMANCE.md) for the full list and the coding conventions that go with them.
+
+| Module      | Building blocks                                                               |
+| ----------- | ----------------------------------------------------------------------------- |
+| `alloc`     | Optional `mimalloc` / `jemalloc` global allocator                             |
+| `arena`     | Bump arenas (one per thread), `ArenaBox`, `SliceStack`, no `Drop` in arenas   |
+| `index`     | `newtype_index!` (4-byte ids, `Option<Id>` still 4 bytes) and `IndexVec`      |
+| `intern`    | `Symbol` interner, `symbols!` consts, slice and flagged interners, `Interned` |
+| `layout`    | `static_assert_size!` budgets, 8-byte `Span` aligned to 4                     |
+| `cache`     | Caches picked by key type (dense slots for indices, no hashing)               |
+| `collect`   | `collect_and_apply`: up to 8 items without touching the heap                  |
+| `bit_set`   | `DenseBitSet` over typed indices, inline up to 128 bits                       |
+| `bytes`     | 256-entry byte class table, `memchr` cursor, `StaticFinder`                   |
+| `hint`      | `likely`, `unlikely`, `cold_path`, `outline`                                  |
+| `sync`      | Size thresholds, ordered `par_map`, sharded merge, `LazyPool`, `JobCounter`   |
+| `diag`      | `ErrorGuaranteed`, diagnostics buffered per task and replayed in order        |
+| `never`     | `Never` on stable, `into_ok` / `into_value` for infallible results            |
+| `recursion` | Recursion bounded by a depth counter                                          |
+
+Nightly-only fast paths are enabled with `RUSTFLAGS="--cfg vulcan_nightly"` (not a feature, so `--all-features` keeps working on stable).
 
 ## Tooling
 
@@ -69,16 +100,21 @@ too-many-lines-threshold = 75 # Default: 100
 | nextest             | Test runner with retries                 |
 | cross               | Cross-compilation (aarch64, riscv64)     |
 | miri                | Undefined behavior detection             |
+| CodSpeed            | Instruction-count benchmarks on every PR |
 
 ## CI
 
 ### Lint Workflow
 
-Clippy, rustfmt, documentation, typos, cargo-deny, dprint, miri, fuzzing, semver checks, external types, cargo-sort.
+Clippy, rustfmt, documentation, typos, cargo-deny, dprint, miri, fuzzing, semver checks, external types, cargo-sort, `--cfg vulcan_nightly` build.
 
 ### Test Workflow
 
 Nextest, doctests, MSRV check (1.93), Valgrind, AddressSanitizer, minimal versions, multi-platform (Linux/macOS/Windows), cross-compilation.
+
+### Bench Workflow
+
+CodSpeed runs `vulcan/benches` in simulation mode and reports the diff against `main` on each PR.
 
 ### PR Title Enforcement
 
@@ -88,25 +124,26 @@ All workflows use sccache, mold linker, and alls-green gate jobs.
 
 ## Configuration
 
-| File            | Purpose                                            |
-| --------------- | -------------------------------------------------- |
-| `Cargo.toml`    | Workspace lints, profiles, MSRV (1.93)             |
-| `clippy.toml`   | Strict thresholds, disallowed types/methods/macros |
-| `Cross.toml`    | Cross-compilation setup                            |
-| `dprint.json`   | Multi-format code formatting                       |
-| `typos.toml`    | Spell checking configuration                       |
-| `.editorconfig` | Editor consistency                                 |
-| `deny.toml`     | License auditing                                   |
+| File                  | Purpose                                            |
+| --------------------- | -------------------------------------------------- |
+| `Cargo.toml`          | Workspace lints, profiles, MSRV (1.93)             |
+| `clippy.toml`         | Strict thresholds, disallowed types/methods/macros |
+| `Cross.toml`          | Cross-compilation setup                            |
+| `dprint.json`         | Multi-format code formatting                       |
+| `typos.toml`          | Spell checking configuration                       |
+| `.editorconfig`       | Editor consistency                                 |
+| `deny.toml`           | License auditing                                   |
+| `docs/PERFORMANCE.md` | Performance building blocks and coding conventions |
 
 ## Build Profiles
 
-| Profile     | Use Case                                       |
-| ----------- | ---------------------------------------------- |
-| `dev`       | Fast iteration with optimized dependencies     |
-| `release`   | Standard optimized builds                      |
-| `maxperf`   | Distribution binary (fat LTO, codegen-units=1) |
-| `profiling` | Release with debug symbols                     |
-| `bench`     | Benchmarking                                   |
+| Profile     | Use Case                                                          |
+| ----------- | ----------------------------------------------------------------- |
+| `dev`       | Fast iteration with optimized dependencies                        |
+| `release`   | Standard optimized builds                                         |
+| `maxperf`   | Distribution binary (fat LTO, codegen-units=1, `panic = "abort"`) |
+| `profiling` | Release with debug symbols                                        |
+| `bench`     | Benchmarking                                                      |
 
 ## Development
 
@@ -114,6 +151,8 @@ All workflows use sccache, mold linker, and alls-green gate jobs.
 make lint    # Run all linters
 make test    # Run all tests
 make pr      # Full pre-PR check
+make bench   # Run benchmarks
+make maxperf-nightly # maxperf with nightly fast paths
 ```
 
 Commit format: `type(scope): description`
