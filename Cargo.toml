@@ -190,6 +190,9 @@ bumpalo = "3.20.3"
 
 # hashing and interning
 indexmap = { version = "2.14.2", default-features = false, features = ["std"] }
+
+# scanning
+memchr = "2.8.3"
 # allocators
 mimalloc = { version = "0.1.52", default-features = false }
 rustc-hash = "2.1.3"

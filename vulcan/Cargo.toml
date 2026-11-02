@@ -27,6 +27,7 @@ tikv-jemallocator = { workspace = true, optional = true }
 [dependencies]
 bumpalo.workspace = true
 indexmap.workspace = true
+memchr.workspace = true
 mimalloc = { workspace = true, optional = true }
 rustc-hash.workspace = true
 thread_local.workspace = true
