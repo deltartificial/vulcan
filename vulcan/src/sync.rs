@@ -12,10 +12,13 @@
 //! ```
 //! use vulcan::sync::par_try_map;
 //!
-//! let parsed = par_try_map(true, vec!["1", "2", "3"], |s| s.parse::<u32>());
+//! // rayon's `crossbeam-epoch` trips Miri's Stacked Borrows checker, so Miri runs it serially.
+//! let parallel = !cfg!(miri);
+//!
+//! let parsed = par_try_map(parallel, vec!["1", "2", "3"], |s| s.parse::<u32>());
 //! assert_eq!(parsed, Ok(vec![1, 2, 3]));
 //!
-//! let failed = par_try_map(true, vec!["1", "x", "y"], |s| s.parse::<u32>().map_err(|_| s));
+//! let failed = par_try_map(parallel, vec!["1", "x", "y"], |s| s.parse::<u32>().map_err(|_| s));
 //! assert_eq!(failed, Err("x"));
 //! ```
 
@@ -152,10 +155,14 @@ where
 mod tests {
     use super::*;
 
+    /// Modes to test. Under Miri only the serial mode runs: rayon's `crossbeam-epoch` dependency
+    /// violates Stacked Borrows, which Miri reports as undefined behavior outside this crate.
+    const MODES: &[bool] = if cfg!(miri) { &[false] } else { &[false, true] };
+
     #[test]
     fn keeps_item_order() {
         let items: Vec<u32> = (0..200).collect();
-        for enabled in [false, true] {
+        for &enabled in MODES {
             let mapped = par_try_map(enabled, items.clone(), |item| Ok::<_, ()>(item * 2));
             assert_eq!(mapped, Ok(items.iter().map(|item| item * 2).collect()));
         }
@@ -163,7 +170,7 @@ mod tests {
 
     #[test]
     fn returns_first_error_in_item_order() {
-        for enabled in [false, true] {
+        for &enabled in MODES {
             let items: Vec<u32> = (0..64).collect();
             let mapped = par_try_map(enabled, items, |item| {
                 if item % 16 == 7 {
@@ -183,7 +190,7 @@ mod tests {
     #[test]
     fn scope_runs_inline_when_disabled() {
         let counter = AtomicUsize::new(0);
-        for enabled in [false, true] {
+        for &enabled in MODES {
             scope(enabled, |s| {
                 assert_eq!(s.is_parallel(), enabled);
                 for _ in 0..8 {
@@ -193,6 +200,6 @@ mod tests {
                 }
             });
         }
-        assert_eq!(counter.load(Ordering::Relaxed), 16);
+        assert_eq!(counter.load(Ordering::Relaxed), 8 * MODES.len());
     }
 }
