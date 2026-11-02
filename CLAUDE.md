@@ -59,6 +59,9 @@ every hot path, in short:
 - Go parallel only through `vulcan::sync` helpers (size thresholds, ordered results), and emit
   diagnostics from parallel code only through `diag::DiagCtxt::par_map` / `DiagBatch`
 - Pin the size of hot types with `static_assert_size!`
+- No `String`/`Vec`/`Rc`/`Arc`/`Box<dyn>` in hot nodes: use `Symbol`, arena slices, `ArenaBox`
+- No `SeqCst`; justify every atomic `Ordering` in a comment
+- `dyn` only on cold paths; build searchers (`StaticFinder`, regexes) once, never in a loop
 
 ## Commit Convention
 

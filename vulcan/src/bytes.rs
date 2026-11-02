@@ -22,6 +22,7 @@
 
 use crate::hint::cold_path;
 use memchr::memmem;
+use std::sync::OnceLock;
 
 /// Bit flag: ASCII whitespace (space, `\t`, `\n`, `\r`, form feed, vertical tab).
 pub const WHITESPACE: u8 = 1 << 0;
@@ -199,14 +200,24 @@ impl<'a> Cursor<'a> {
     ///
     /// Returns `false`, consuming the rest of the input, if `needle` never occurs.
     #[inline]
+    ///
+    /// Builds a new searcher on every call; in a loop, prefer
+    /// [`skip_past_finder`](Self::skip_past_finder) with a [`StaticFinder`].
     pub fn skip_past(&mut self, needle: &[u8]) -> bool {
-        let found = memmem::find(self.rest, needle);
+        self.skip_past_finder(&memmem::Finder::new(needle))
+    }
+
+    /// Like [`skip_past`](Self::skip_past), with a searcher built once by the caller.
+    #[inline]
+    pub fn skip_past_finder(&mut self, finder: &memmem::Finder<'_>) -> bool {
+        let needle_len = finder.needle().len();
+        let found = finder.find(self.rest);
         let Some(start) = found else {
             cold_path();
             self.rest = &[];
             return false;
         };
-        self.advance(start + needle.len());
+        self.advance(start + needle_len);
         true
     }
 
@@ -216,6 +227,42 @@ impl<'a> Cursor<'a> {
         let (head, rest) = self.rest.split_at(len.min(self.rest.len()));
         self.rest = rest;
         head
+    }
+}
+
+/// A substring searcher for a fixed needle, built on first use and then shared.
+///
+/// Building a [`memmem::Finder`] analyzes the needle and picks a SIMD strategy; doing it on every
+/// search wastes that work. Declare one `static` per fixed needle (a comment terminator, a
+/// delimiter) instead:
+///
+/// ```
+/// use vulcan::bytes::{Cursor, StaticFinder};
+///
+/// static BLOCK_END: StaticFinder = StaticFinder::new(b"*/");
+///
+/// let mut cursor = Cursor::new(b" a block */ rest");
+/// assert!(cursor.skip_past_finder(BLOCK_END.get()));
+/// assert_eq!(cursor.rest(), b" rest");
+/// ```
+#[derive(Debug)]
+pub struct StaticFinder {
+    needle: &'static [u8],
+    finder: OnceLock<memmem::Finder<'static>>,
+}
+
+impl StaticFinder {
+    /// Declares a searcher for `needle`. Nothing is computed until the first [`get`](Self::get).
+    #[must_use]
+    pub const fn new(needle: &'static [u8]) -> Self {
+        Self { needle, finder: OnceLock::new() }
+    }
+
+    /// Returns the searcher, building it on first use.
+    #[inline]
+    #[must_use]
+    pub fn get(&self) -> &memmem::Finder<'static> {
+        self.finder.get_or_init(|| memmem::Finder::new(self.needle))
     }
 }
 
@@ -243,7 +290,8 @@ mod tests {
         assert_eq!(cursor.pos(), 8);
         assert_eq!(cursor.eat_while(|b| b != b' '), b"\"str\"");
         assert_eq!(cursor.skip_until_byte(b'/'), b" ");
-        assert!(!cursor.skip_past(b"*/"));
+        static BLOCK_END: StaticFinder = StaticFinder::new(b"*/");
+        assert!(!cursor.skip_past_finder(BLOCK_END.get()));
         assert!(cursor.is_eof());
         assert_eq!(cursor.bump(), None);
     }

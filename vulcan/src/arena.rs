@@ -147,6 +147,85 @@ pub fn alloc_one<T>(arena: &Bump, value: T) -> &mut [T] {
     arena.alloc_exact(iter::once(value))
 }
 
+/// The "box" of arena-allocated trees: a unique reference into the arena.
+///
+/// One word with a non-null niche, so `Option<ArenaBox<'a, T>>` is still one word. Creating it is
+/// a pointer bump and dropping it does nothing; the arena frees every node at once. Use it for
+/// child links in ASTs and IRs where a heap `Box<T>` would cost a `malloc` and a `free` per node.
+pub type ArenaBox<'a, T> = &'a mut T;
+
+/// A position in a [`SliceStack`], returned by [`SliceStack::mark`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[must_use = "a mark is needed to finish the slice"]
+pub struct Mark(usize);
+
+/// One growable buffer shared by every level of a recursive builder.
+///
+/// A recursive parser that collects children into a local `Vec` (or a `SmallVec` on the stack)
+/// pays an allocation or stack space at every nesting level. Instead, each level records a
+/// [`mark`](Self::mark), pushes its children onto the shared stack, then moves everything above
+/// its mark into the arena with [`finish`](Self::finish). Nested levels finish first, so the stack
+/// unwinds in order and its single allocation is reused for the whole run.
+///
+/// ```
+/// use vulcan::arena::{Bump, SliceStack};
+///
+/// let arena = Bump::new();
+/// let mut stack = SliceStack::new();
+/// let outer = stack.mark();
+/// stack.push(1_u32);
+/// let inner = stack.mark();
+/// stack.push(10);
+/// stack.push(11);
+/// let children = stack.finish(inner, &arena);
+/// stack.push(2);
+/// assert_eq!(children, &[10, 11]);
+/// assert_eq!(stack.finish(outer, &arena), &[1, 2]);
+/// ```
+#[derive(Debug, Default)]
+pub struct SliceStack<T> {
+    items: Vec<T>,
+}
+
+impl<T> SliceStack<T> {
+    /// Creates an empty stack.
+    #[must_use]
+    pub const fn new() -> Self {
+        Self { items: Vec::new() }
+    }
+
+    /// Creates an empty stack with room for `capacity` items across all levels.
+    #[must_use]
+    pub fn with_capacity(capacity: usize) -> Self {
+        Self { items: Vec::with_capacity(capacity) }
+    }
+
+    /// Records the current top of the stack.
+    pub const fn mark(&self) -> Mark {
+        Mark(self.items.len())
+    }
+
+    /// Pushes an item for the current level.
+    #[inline]
+    pub fn push(&mut self, item: T) {
+        self.items.push(item);
+    }
+
+    /// Returns the items pushed since `mark`.
+    #[must_use]
+    pub fn since(&self, mark: Mark) -> &[T] {
+        self.items.get(mark.0..).map_or(&[], |items| items)
+    }
+
+    /// Moves the items pushed since `mark` into `arena` and pops them.
+    ///
+    /// A mark taken before items that were already finished (out of order) yields an empty slice.
+    pub fn finish<'a>(&mut self, mark: Mark, arena: &'a Bump) -> &'a mut [T] {
+        let start = mark.0.min(self.items.len());
+        arena.alloc_exact(self.items.drain(start..))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

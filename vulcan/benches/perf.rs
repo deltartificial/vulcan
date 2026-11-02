@@ -12,7 +12,7 @@ use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use std::{collections::BTreeMap, hint::black_box};
 use vulcan::{
     arena::{Bump, BumpExt},
-    bytes::{Cursor, is_id_continue, is_whitespace},
+    bytes::{Cursor, StaticFinder, is_id_continue, is_whitespace},
     intern::Interner,
     sync::par_try_map,
 };
@@ -29,6 +29,8 @@ fn source(words: usize) -> Vec<u8> {
     out
 }
 
+static BLOCK_END: StaticFinder = StaticFinder::new(b"*/");
+
 fn bench_scan(c: &mut Criterion) {
     let src = source(4096);
     let mut group = c.benchmark_group("scan");
@@ -39,7 +41,7 @@ fn bench_scan(c: &mut Criterion) {
             while !cursor.is_eof() {
                 cursor.eat_while(is_whitespace);
                 if cursor.eat_str(b"/*") {
-                    cursor.skip_past(b"*/");
+                    cursor.skip_past_finder(BLOCK_END.get());
                 } else if !cursor.eat_while(is_id_continue).is_empty() {
                     idents += 1;
                 } else {
