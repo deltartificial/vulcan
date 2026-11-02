@@ -23,7 +23,8 @@ env:
 jobs:
   codspeed:
     name: codspeed
-    runs-on: ubuntu-latest
+    # The CodSpeed runner only supports specific Ubuntu releases ("Unsupported system" on latest).
+    runs-on: ubuntu-24.04
     timeout-minutes: 60
     permissions:
       contents: read
