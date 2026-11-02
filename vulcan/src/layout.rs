@@ -6,8 +6,9 @@
 //! at compile time with [`static_assert_size!`](crate::static_assert_size): the build fails as
 //! soon as a pinned type changes size.
 //!
-//! [`Span`] packs two `u32` offsets packed into one `u64`, so a span travels in
-//! a single register and derived comparisons are a single integer comparison.
+//! [`Span`] packs two `u32` offsets into one `u64`, so a span travels in a single register and
+//! derived comparisons are a single integer comparison. It is 4-aligned, so it adds no padding next
+//! to other `u32` fields.
 
 use std::{fmt, ops::Range};
 
@@ -42,7 +43,9 @@ macro_rules! static_assert_size {
 /// assert_eq!(&"let answer = 42;"[Span::new(4, 10).range()], "answer");
 /// ```
 #[derive(Clone, Copy, Default, PartialEq, Eq, Hash)]
-#[repr(transparent)]
+// Alignment 4 instead of 8: next to `u32` handles (`Symbol`, indices) a span adds no padding, so
+// `(Symbol, Span)` is 12 bytes instead of 16. Fields are only read by value, never borrowed.
+#[repr(Rust, packed(4))]
 pub struct Span {
     // `hi` in the high half and `lo` in the low half, so the derived `Eq` and `Hash` work on one
     // integer.
@@ -130,10 +133,11 @@ impl fmt::Debug for Span {
 // Size budgets for the hot types of the crate. Changing one of these numbers is a deliberate,
 // reviewed decision.
 static_assert_size!(Span, 8);
-static_assert_size!(Option<Span>, 16);
+static_assert_size!(Option<Span>, 12);
 static_assert_size!(crate::intern::Symbol, 4);
 static_assert_size!(Option<crate::intern::Symbol>, 4);
-static_assert_size!((crate::intern::Symbol, Span), 16);
+static_assert_size!((crate::intern::Symbol, Span), 12);
+const _: () = assert!(align_of::<Span>() == 4, "`Span` must stay 4-aligned");
 #[cfg(target_pointer_width = "64")]
 static_assert_size!(crate::intern::Interned<'static, u128>, 8);
 #[cfg(target_pointer_width = "64")]

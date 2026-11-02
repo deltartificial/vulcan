@@ -45,6 +45,21 @@ make pr                                # full pre-PR check
 - Comments should explain **why**, not **what**
 - Keep public APIs well-documented with `///` doc comments
 
+## Performance Conventions
+
+Vulcan's purpose is speed. Follow [docs/PERFORMANCE.md](docs/PERFORMANCE.md#coding-conventions) on
+every hot path, in short:
+
+- Inline the common-case check, move the rest to a `#[cold]` function
+- Use `#[inline(never)]` for rare cases with large locals in recursive code, and say why
+- No `format!`/`to_string` before an error branch: format after `hint::cold_path()` or in a
+  `#[cold]` function
+- Keep `Result` small: box large errors, return `diag::ErrorGuaranteed` once reported
+- Reuse buffers (`clear`, `mem::swap`) instead of allocating per iteration
+- Go parallel only through `vulcan::sync` helpers (size thresholds, ordered results), and emit
+  diagnostics from parallel code only through `diag::DiagCtxt::par_map` / `DiagBatch`
+- Pin the size of hot types with `static_assert_size!`
+
 ## Commit Convention
 
 Conventional Commits format: `type(scope): description`

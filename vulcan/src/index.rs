@@ -43,7 +43,8 @@ pub trait Idx: Copy + Eq + Ord + fmt::Debug + 'static {
 
 /// Defines `u32` index newtypes with a niche, so `Option<Self>` is 4 bytes.
 ///
-/// The type implements [`Idx`], `Copy`, `Eq`, `Ord`, `Hash` and `Debug`, and exposes
+/// The type implements [`Idx`], [`CacheKey`](crate::cache::CacheKey) (with a dense cache),
+/// `Copy`, `Eq`, `Ord`, `Hash` and `Debug`, and exposes
 /// `from_u32`, `try_from_u32`, `as_u32`, `as_usize` and `MAX`.
 #[macro_export]
 macro_rules! newtype_index {
@@ -119,6 +120,10 @@ macro_rules! newtype_index {
             fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
                 write!(f, "{}({})", stringify!($name), self.as_u32())
             }
+        }
+
+        impl $crate::cache::CacheKey for $name {
+            type Cache<V: Copy> = $crate::cache::DenseCache<Self, V>;
         }
 
         impl $crate::index::Idx for $name {
