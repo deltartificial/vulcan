@@ -1,6 +1,6 @@
 //! Niche-optimized index newtypes and typed vectors.
 //!
-//! Solar refers to AST and HIR nodes through `u32` newtypes stored in `IndexVec`s instead of
+//! Refer to AST and IR nodes through `u32` newtypes stored in `IndexVec`s instead of
 //! pointers or hash maps: an index is 4 bytes instead of 8, lookups are a bounds check plus an
 //! offset, and the type system stops an `ItemId` from indexing the function table.
 //!
