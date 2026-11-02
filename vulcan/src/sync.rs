@@ -636,10 +636,9 @@ mod tests {
         }
         assert!(!jobs.has_queued());
         drop_in_background(!cfg!(miri), vec![String::from("freed elsewhere"); 16]);
-        // A deliberate leak, which Miri would report as an error.
-        if !cfg!(miri) {
-            skip_drop(vec![0_u8; 8]);
-        }
+        // An empty `Vec` owns no heap memory, so skipping its drop leaks nothing that Miri or
+        // LeakSanitizer would report.
+        skip_drop(Vec::<u8>::new());
     }
 
     #[test]
