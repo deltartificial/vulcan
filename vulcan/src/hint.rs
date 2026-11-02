@@ -1,7 +1,7 @@
 //! Branch hints and cold-path outlining.
 //!
 //! The optimizer lays out code for the common case only if it knows which case is common. These
-//! helpers, ported from Solar, mark rare branches so the hot path stays dense in the instruction
+//! helpers mark rare branches so the hot path stays dense in the instruction
 //! cache and falls through without a jump.
 //!
 //! - [`likely`] and [`unlikely`] wrap a condition.
