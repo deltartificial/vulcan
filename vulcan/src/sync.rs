@@ -1,6 +1,6 @@
 //! Opt-in, deterministic parallelism.
 //!
-//! Ported from Solar's `crates/data-structures/src/sync.rs`. Two rules shape it:
+//! Two rules shape this module:
 //!
 //! - **Parallelism is a runtime switch.** Every helper takes `enabled`. When it is `false` the work
 //!   runs inline on the caller's thread with no rayon scope, no job allocation and no
