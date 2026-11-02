@@ -244,14 +244,14 @@ impl<I: Idx, T> IndexVec<I, T> {
 
     /// Iterates over `(index, element)` pairs.
     #[inline]
-    #[must_use]
+    #[must_use = "iterators are lazy and do nothing unless consumed"]
     pub fn iter_enumerated(&self) -> impl ExactSizeIterator<Item = (I, &T)> {
         self.raw.iter().enumerate().map(|(i, value)| (I::from_usize(i), value))
     }
 
     /// Iterates over all valid indices.
     #[inline]
-    #[must_use]
+    #[must_use = "iterators are lazy and do nothing unless consumed"]
     pub fn indices(&self) -> impl ExactSizeIterator<Item = I> + use<I, T> {
         (0..self.raw.len()).map(I::from_usize)
     }
