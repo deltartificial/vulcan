@@ -2,8 +2,8 @@
 //!
 //! Short-lived graphs (ASTs, IR, per-request scratch data) are allocated in a [`Bump`] arena: an
 //! allocation is a pointer bump, there is no per-object header, and the whole arena is freed at
-//! once. Solar allocates its AST and HIR this way, with one arena per thread so parallel phases
-//! allocate without contention (see [`ThreadArenas`]).
+//! once. With one arena per thread, parallel phases allocate without contention (see
+//! [`ThreadArenas`]).
 //!
 //! The arena never runs destructors. The [`BumpExt`] helpers reject element types that need
 //! [`Drop`] at compile time, because their owned memory (a `String`, a `Vec`) would leak:
