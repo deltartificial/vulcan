@@ -13,6 +13,7 @@ pub mod hint;
 pub mod index;
 pub mod intern;
 pub mod layout;
+pub mod sync;
 
 /// Adds two numbers together.
 ///

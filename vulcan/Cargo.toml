@@ -29,6 +29,8 @@ bumpalo.workspace = true
 indexmap.workspace = true
 memchr.workspace = true
 mimalloc = { workspace = true, optional = true }
+parking_lot.workspace = true
+rayon.workspace = true
 rustc-hash.workspace = true
 thread_local.workspace = true
 
