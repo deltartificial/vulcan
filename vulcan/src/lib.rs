@@ -10,6 +10,7 @@ pub mod alloc;
 pub mod arena;
 pub mod index;
 pub mod intern;
+pub mod layout;
 
 /// Adds two numbers together.
 ///
