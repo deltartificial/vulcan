@@ -1,6 +1,6 @@
 name: bench
 
-# CodSpeed runs the benchmarks under instruction counting, which is deterministic enough to
+# CodSpeed runs the benchmarks in simulation mode (instruction counting), which is deterministic enough to
 # compare a pull request against `main` and comment the diff. Requires the repository to be
 # enabled on codspeed.io (OIDC, no token secret needed for public repositories).
 
@@ -44,5 +44,5 @@ jobs:
       - run: cargo codspeed build --workspace
       - uses: CodSpeedHQ/action@v4
         with:
-          mode: instrumentation
+          mode: simulation
           run: cargo codspeed run --workspace
