@@ -1,8 +1,7 @@
 # Performance roadmap
 
-Vulcan exists to be fast. This roadmap tracks the performance patterns we port from
-[Solar](https://github.com/paradigmxyz/solar), Paradigm's Solidity compiler, which outruns `solc`
-by an order of magnitude largely through allocation, layout and parallelism discipline.
+Vulcan exists to be fast. This roadmap tracks the performance patterns we adopt, all built on
+allocation, layout and parallelism discipline.
 
 Each item lands as its own pull request stacked on this branch.
 
@@ -30,9 +29,9 @@ Each item lands as its own pull request stacked on this branch.
   single-threaded path pays no rayon overhead.
 - **Measure instructions, not wall time.** CI benchmarks must be stable enough to gate PRs.
 
-## Deliberate differences from Solar
+## Deliberate constraints
 
-- Vulcan keeps `#![forbid(unsafe_code)]`. Solar's `ThinSlice` and unchecked index constructors
-  are not ported; every pattern here is implemented in safe Rust.
+- Vulcan keeps `#![forbid(unsafe_code)]`. Thin slices and unchecked index constructors are left
+  out; every pattern here is implemented in safe Rust.
 - Nightly fast paths use a `--cfg` flag rather than a Cargo feature, so CI jobs that build with
   `--all-features` on stable keep working.
