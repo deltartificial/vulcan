@@ -32,7 +32,7 @@ explicit_outlives_requirements = "warn"
 unsafe_op_in_unsafe_fn = "warn"
 unused_extern_crates = "warn"
 unused_lifetimes = "warn"
-unexpected_cfgs = "warn"
+unexpected_cfgs = { level = "warn", check-cfg = ["cfg(vulcan_nightly)"] }
 
 [workspace.lints.rustdoc]
 all = "warn"

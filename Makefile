@@ -32,6 +32,10 @@ profiling: ## Build with profiling symbols.
 maxperf: ## Build with maximum performance optimizations.
 	RUSTFLAGS="-C target-cpu=native" cargo build --profile maxperf
 
+.PHONY: maxperf-nightly
+maxperf-nightly: ## maxperf plus nightly-only fast paths (`--cfg vulcan_nightly`).
+	RUSTFLAGS="-C target-cpu=native --cfg vulcan_nightly" cargo +nightly build --profile maxperf
+
 ##@ Lint
 
 .PHONY: fmt
@@ -66,6 +70,11 @@ clippy-fix: ## Run clippy with auto-fix.
 		--allow-staged \
 		--allow-dirty \
 		-- -D warnings
+
+.PHONY: clippy-nightly-cfg
+clippy-nightly-cfg: ## Run clippy and tests with the nightly fast paths enabled.
+	RUSTFLAGS="--cfg vulcan_nightly -D warnings" cargo +nightly clippy --workspace --all-targets --all-features
+	RUSTFLAGS="--cfg vulcan_nightly" cargo +nightly nextest run --workspace --all-features
 
 .PHONY: lint-typos
 lint-typos: ensure-typos ## Run typos spell checker.

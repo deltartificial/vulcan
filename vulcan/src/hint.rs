@@ -24,31 +24,51 @@
 //! ```
 //!
 //! On stable these work through a call to an empty `#[cold]` function, which LLVM treats as a
-//! branch weight.
+//! branch weight. Built with `RUSTFLAGS="--cfg vulcan_nightly"` on a nightly toolchain, they
+//! lower to the `core::hint` intrinsics instead, which emit the branch weight directly and work
+//! inside expressions where a call cannot be placed.
 
 /// Marks the code path that calls it as unlikely to run.
 #[inline(always)]
-#[cold]
-pub const fn cold_path() {}
+#[cfg_attr(not(vulcan_nightly), cold)]
+pub const fn cold_path() {
+    // `core::hint::cold_path` is stable since 1.95, above the 1.93 MSRV, so it stays behind the
+    // nightly flag until the MSRV moves.
+    #[cfg(vulcan_nightly)]
+    #[expect(clippy::incompatible_msrv, reason = "only compiled with `--cfg vulcan_nightly`")]
+    core::hint::cold_path();
+}
 
 /// Returns `b`, hinting that it is usually `true`.
 #[inline(always)]
 #[must_use]
 pub const fn likely(b: bool) -> bool {
-    if !b {
-        cold_path();
+    #[cfg(vulcan_nightly)]
+    return core::hint::likely(b);
+
+    #[cfg(not(vulcan_nightly))]
+    {
+        if !b {
+            cold_path();
+        }
+        b
     }
-    b
 }
 
 /// Returns `b`, hinting that it is usually `false`.
 #[inline(always)]
 #[must_use]
 pub const fn unlikely(b: bool) -> bool {
-    if b {
-        cold_path();
+    #[cfg(vulcan_nightly)]
+    return core::hint::unlikely(b);
+
+    #[cfg(not(vulcan_nightly))]
+    {
+        if b {
+            cold_path();
+        }
+        b
     }
-    b
 }
 
 /// Calls `f` in a separate, never-inlined, cold function.
