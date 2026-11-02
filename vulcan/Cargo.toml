@@ -8,10 +8,24 @@ license.workspace = true
 repository.workspace = true
 homepage.workspace = true
 
+# With `--all-features` only one allocator backend is selected, so the other looks unused.
+[package.metadata.cargo-udeps.ignore]
+normal = ["mimalloc", "tikv-jemallocator"]
+
 [lib]
 doctest = true
 
+[features]
+# Faster but less portable global allocators. See `vulcan::alloc`.
+mimalloc = ["dep:mimalloc"]
+# Ignored on MSVC targets, where jemalloc does not build.
+jemalloc = ["dep:tikv-jemallocator"]
+
 [dependencies]
+mimalloc = { workspace = true, optional = true }
+
+[target.'cfg(not(target_env = "msvc"))'.dependencies]
+tikv-jemallocator = { workspace = true, optional = true }
 
 [dev-dependencies]
 

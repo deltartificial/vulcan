@@ -6,6 +6,8 @@
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 
+pub mod alloc;
+
 /// Adds two numbers together.
 ///
 /// # Examples

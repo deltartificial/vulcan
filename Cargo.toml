@@ -185,8 +185,9 @@ manual_unwrap_or = "allow"
 # ============================================================================
 
 [workspace.dependencies]
-# Add your workspace dependencies here
-# test
+# allocators
+mimalloc = { version = "0.1.52", default-features = false }
+tikv-jemallocator = "0.7.0"
 
 [workspace.metadata.docs.rs]
 all-features = true
