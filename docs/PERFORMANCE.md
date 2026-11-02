@@ -72,6 +72,26 @@ These are rules for every hot path, not modules. Reviewers (human or AI) should 
   `DiagCtxt::par_map` or a `DiagBatch`.
 - **Copy values in caches.** A cache hit returns a `Copy` value or an arena reference, never a
   clone or an `Arc`.
+- **No owning fields in hot nodes.** No `String`, `Vec`, `Rc`, `Arc` or `Box<dyn _>` inside AST/IR
+  nodes, and no `Vec<Vec<T>>`: names are `Symbol`s, lists are arena slices, children are
+  `ArenaBox`es or indices.
+- **Split kind and wrapper, box rare large variants.** `Expr { span, kind: ExprKind }`, and a
+  variant much larger than the others goes behind an `ArenaBox` so it does not inflate every value
+  of the enum. Pin the result with `static_assert_size!`.
+- **Size `SmallVec`s from measurements.** Choose the inline capacity from observed percentiles
+  and write them in a comment (for example "p80: 1, p95: 4"), instead of guessing.
+- **Special-case the common small sizes.** Handle 0, 1 and 2 elements (or lookahead distances)
+  explicitly when they dominate, so constants fold and no buffer is built.
+- **Justify every atomic ordering, and avoid `SeqCst`.** State in a comment why `Relaxed`,
+  `Acquire`/`Release` or `AcqRel` is enough; `SeqCst` is almost never needed.
+- **Keep reference counts thread-local.** On hot paths prefer `Rc` confined to one task (moved in
+  and out of parallel work as owned values) over `Arc`, whose atomic increments contend.
+- **`dyn` only on cold paths.** Hot code takes `impl Fn`/generics; `&mut dyn FnMut` and
+  `Box<dyn _>` are for callbacks that run rarely, where code size matters more than dispatch.
+- **Compile tracing out, do not test a flag.** Instrumentation of hot loops sits behind `cfg`
+  (or `tracing`'s `release_max_level_*` features), not behind a runtime boolean.
+- **Build searchers once.** Fixed needles use a `StaticFinder`; regexes and other compiled
+  matchers live in a `static` or a struct field, never in the loop.
 
 ## Deliberate constraints
 

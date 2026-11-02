@@ -346,6 +346,9 @@ where
     ShardedMap::merge(true, maps)
 }
 
+/// A function run on each new worker thread, with the worker's index.
+pub type StartHandler = fn(usize);
+
 /// Settings for a dedicated rayon pool, built on first use by [`LazyPool`].
 #[derive(Debug, Clone, Copy)]
 pub struct PoolConfig {
@@ -356,11 +359,20 @@ pub struct PoolConfig {
     pub stack_size: usize,
     /// Worker threads are named `{name_prefix}-{index}`, which shows up in profilers.
     pub name_prefix: &'static str,
+    /// Called on each worker thread, with its index, before it runs any job. Use it to install
+    /// thread-local context (an interner, a session) once per worker instead of passing it to
+    /// every task.
+    pub start_handler: Option<StartHandler>,
 }
 
 impl Default for PoolConfig {
     fn default() -> Self {
-        Self { threads: None, stack_size: 16 * 1024 * 1024, name_prefix: "vulcan" }
+        Self {
+            threads: None,
+            stack_size: 16 * 1024 * 1024,
+            name_prefix: "vulcan",
+            start_handler: None,
+        }
     }
 }
 
@@ -423,14 +435,95 @@ impl LazyPool {
         }
         let pool = self.pool.get_or_init(|| {
             let prefix = self.config.name_prefix;
-            rayon::ThreadPoolBuilder::new()
+            let mut builder = rayon::ThreadPoolBuilder::new()
                 .num_threads(self.config.thread_count())
                 .stack_size(self.config.stack_size)
-                .thread_name(move |index| format!("{prefix}-{index}"))
-                .build()
+                .thread_name(move |index| format!("{prefix}-{index}"));
+            if let Some(handler) = self.config.start_handler {
+                builder = builder.start_handler(handler);
+            }
+            builder.build()
         });
         pool.as_ref().map(|built| built.install(op))
     }
+}
+
+/// Counts jobs waiting to run, so nested work can yield the pool to them.
+///
+/// An outer scheduler increments the count while a job is queued; an inner pass checks
+/// [`has_queued`](Self::has_queued) and stays serial when outer jobs are waiting, because they
+/// need the workers more. The counter is only a scheduling hint, so relaxed atomics are enough.
+///
+/// ```
+/// use vulcan::sync::{JobCounter, par_map};
+///
+/// let jobs = JobCounter::new();
+/// let ticket = jobs.enqueue();
+/// assert!(jobs.has_queued());
+/// // Inner work stays serial while an outer job waits.
+/// let out = par_map(!jobs.has_queued(), (0..100).collect(), |x: u32| x + 1);
+/// assert_eq!(out.len(), 100);
+/// drop(ticket);
+/// assert!(!jobs.has_queued());
+/// ```
+#[derive(Debug, Default)]
+pub struct JobCounter {
+    queued: AtomicUsize,
+}
+
+impl JobCounter {
+    /// Creates a counter with no queued job.
+    #[must_use]
+    pub const fn new() -> Self {
+        Self { queued: AtomicUsize::new(0) }
+    }
+
+    /// Marks one job as queued until the returned ticket is dropped (when the job starts).
+    pub fn enqueue(&self) -> QueuedJob<'_> {
+        self.queued.fetch_add(1, Ordering::Relaxed);
+        QueuedJob { counter: self }
+    }
+
+    /// Returns `true` if at least one job is waiting.
+    #[must_use]
+    pub fn has_queued(&self) -> bool {
+        self.queued.load(Ordering::Relaxed) > 0
+    }
+}
+
+/// A queued job; dropping it (when the job starts) removes it from its [`JobCounter`].
+#[derive(Debug)]
+#[must_use = "the job counts as queued until this ticket is dropped"]
+pub struct QueuedJob<'a> {
+    counter: &'a JobCounter,
+}
+
+impl Drop for QueuedJob<'_> {
+    fn drop(&mut self) {
+        self.counter.queued.fetch_sub(1, Ordering::Relaxed);
+    }
+}
+
+/// Drops `value` off the current thread, so freeing a large structure (an AST, its arenas) does
+/// not block the critical path. Drops inline when `!enabled`.
+pub fn drop_in_background<T: Send + 'static>(enabled: bool, value: T) {
+    if enabled {
+        rayon::spawn(move || {
+            let _dropped = value;
+        });
+    } else {
+        let _dropped = value;
+    }
+}
+
+/// Skips running the destructor of `value`, leaking its memory.
+///
+/// Meant for the very end of a short-lived process: tearing down large graphs one node at a
+/// time only to exit right after is wasted work, since the OS reclaims the memory anyway. Never
+/// use it on values that own non-memory resources whose release matters (files to flush, locks).
+#[expect(clippy::mem_forget, reason = "skipping teardown is the purpose of this function")]
+pub const fn skip_drop<T>(value: T) {
+    std::mem::forget(value);
 }
 
 #[cfg(test)]
@@ -531,5 +624,39 @@ mod tests {
         assert!(pool.is_parallel());
         let name = pool.install(|| std::thread::current().name().map(str::to_owned));
         assert!(name.ok().flatten().is_some_and(|thread| thread.starts_with("test-")));
+    }
+
+    #[test]
+    fn job_counter_and_background_drop() {
+        let jobs = JobCounter::new();
+        {
+            let _first = jobs.enqueue();
+            let _second = jobs.enqueue();
+            assert!(jobs.has_queued());
+        }
+        assert!(!jobs.has_queued());
+        drop_in_background(!cfg!(miri), vec![String::from("freed elsewhere"); 16]);
+        // A deliberate leak, which Miri would report as an error.
+        if !cfg!(miri) {
+            skip_drop(vec![0_u8; 8]);
+        }
+    }
+
+    #[test]
+    #[cfg_attr(miri, ignore = "spawns rayon threads, see `MODES`")]
+    fn start_handler_runs_on_workers() {
+        static STARTED: AtomicUsize = AtomicUsize::new(0);
+        fn on_start(_index: usize) {
+            STARTED.fetch_add(1, Ordering::Relaxed);
+        }
+        let config = PoolConfig {
+            threads: NonZeroUsize::new(2),
+            start_handler: Some(on_start),
+            ..PoolConfig::default()
+        };
+        let pool = LazyPool::new(config);
+        assert_eq!(pool.install(|| 1).ok(), Some(1));
+        // Workers start asynchronously; at least the one that ran the job has started.
+        assert!(STARTED.load(Ordering::Relaxed) >= 1);
     }
 }

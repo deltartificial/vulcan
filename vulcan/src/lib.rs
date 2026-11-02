@@ -11,6 +11,7 @@
 
 pub mod alloc;
 pub mod arena;
+pub mod bit_set;
 pub mod bytes;
 pub mod cache;
 pub mod collect;
@@ -20,6 +21,7 @@ pub mod index;
 pub mod intern;
 pub mod layout;
 pub mod never;
+pub mod recursion;
 pub mod sync;
 
 /// Adds two numbers together.
