@@ -8,6 +8,7 @@
 
 pub mod alloc;
 pub mod arena;
+pub mod index;
 
 /// Adds two numbers together.
 ///
