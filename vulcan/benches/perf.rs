@@ -14,7 +14,7 @@ use vulcan::{
     arena::{Bump, BumpExt},
     bytes::{Cursor, StaticFinder, is_id_continue, is_whitespace},
     intern::Interner,
-    sync::par_try_map,
+    sync::{ShardedMap, par_try_map},
 };
 
 /// A synthetic source mixing identifiers, whitespace and block comments.
@@ -120,5 +120,34 @@ fn bench_par(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(benches, bench_scan, bench_intern, bench_alloc, bench_par);
+fn bench_sharded(c: &mut Criterion) {
+    // Dense ids, the common key shape, plus misses: a miss scans until an empty slot, so it
+    // shows probe length directly.
+    let keys: Vec<u64> = (0..100_000).collect();
+    let mut map = ShardedMap::new();
+    for &key in &keys {
+        map.insert(key, key);
+    }
+    let mut group = c.benchmark_group("sharded_map");
+    group.bench_function("insert", |b| {
+        b.iter(|| {
+            let mut map = ShardedMap::new();
+            for &key in black_box(&keys) {
+                map.insert(key, key);
+            }
+            map.len()
+        });
+    });
+    group.bench_function("get_hit", |b| {
+        b.iter(|| black_box(&keys).iter().filter(|&key| map.get(key).is_some()).count());
+    });
+    group.bench_function("get_miss", |b| {
+        b.iter(|| {
+            black_box(&keys).iter().filter(|&&key| map.get(&(key + 1_000_000)).is_some()).count()
+        });
+    });
+    group.finish();
+}
+
+criterion_group!(benches, bench_scan, bench_intern, bench_alloc, bench_par, bench_sharded);
 criterion_main!(benches);
