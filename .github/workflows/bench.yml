@@ -30,7 +30,7 @@ jobs:
       contents: read
       id-token: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
       - uses: dtolnay/rust-toolchain@stable
@@ -42,7 +42,7 @@ jobs:
         with:
           tool: cargo-codspeed
       - run: cargo codspeed build --workspace
-      - uses: CodSpeedHQ/action@v4
+      - uses: CodSpeedHQ/action@v5
         with:
           mode: simulation
           run: cargo codspeed run --workspace
