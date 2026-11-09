@@ -183,23 +183,8 @@ jobs:
       - uses: obi1kenobi/cargo-semver-checks-action@v2
         with:
           package: --workspace
+        # Advisory until the crates are published: there is no registry baseline to diff against.
         continue-on-error: true
-
-  external-types:
-    name: external types
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: taiki-e/install-action@v2
-        with:
-          tool: cargo-check-external-types
-      - run: cargo check-external-types --all-features || echo "No public API to check yet - setup complete"
 
   feature-propagation:
     name: feature propagation
@@ -213,7 +198,7 @@ jobs:
           persist-credentials: false
       - uses: dtolnay/rust-toolchain@stable
       - run: cargo install zepter --locked
-      - run: zepter run check || echo "No feature propagation config - setup complete"
+      - run: zepter run check
 
   wasm:
     name: wasm
@@ -231,25 +216,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
-      - run: cargo check --workspace --target wasm32-wasip1 || echo "No no_std packages to check - wasm setup complete"
-
-  riscv:
-    name: riscv
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: riscv32imac-unknown-none-elf
-      - uses: Swatinem/rust-cache@v2
-        with:
-          cache-on-failure: true
-      - run: cargo check --workspace --target riscv32imac-unknown-none-elf || echo "No no_std packages to check - riscv setup complete"
+      - run: cargo check --workspace --target wasm32-wasip1
 
   no-test-deps:
     name: no test deps
@@ -302,8 +269,12 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
-      - run: cargo install cargo-fuzz
-      - run: cargo fuzz build --fuzz-dir fuzz || echo "No fuzz targets yet - setup complete"
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-fuzz
+      - run: cargo fuzz build --fuzz-dir fuzz
+      # A short smoke run: long campaigns belong in a scheduled job, not in PR CI.
+      - run: cargo fuzz run --fuzz-dir fuzz cursor -- -max_total_time=20
 
   nightly-cfg:
     name: nightly cfg
@@ -344,10 +315,8 @@ jobs:
       - features
       - cargo-sort
       - semver
-      - external-types
       - feature-propagation
       - wasm
-      - riscv
       - no-test-deps
       - miri
       - fuzzing

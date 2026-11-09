@@ -1,30 +1,34 @@
-# Performance roadmap
+# Performance
 
 Vulcan exists to be fast. This document lists the performance building blocks of the crate and
 the coding conventions that go with them, all built on allocation, layout and parallelism
 discipline.
 
-| #  | Pattern                                               | Module / file     |
-| -- | ----------------------------------------------------- | ----------------- |
-| 1  | Optional global allocator (mimalloc, jemalloc)        | `vulcan::alloc`   |
-| 2  | Bump arenas, one per thread                           | `vulcan::arena`   |
-| 3  | Niche-optimized index newtypes and `IndexVec`         | `vulcan::index`   |
-| 4  | Interning (`Symbol`, pointer-identity `Interned`)     | `vulcan::intern`  |
-| 5  | Compile-time type size assertions                     | `vulcan::layout`  |
-| 6  | Branch hints and cold-path outlining                  | `vulcan::hint`    |
-| 7  | Lookup-table byte classification, `memchr` scans      | `vulcan::bytes`   |
-| 8  | Opt-in rayon scope and ordered `par_try_map`          | `vulcan::sync`    |
-| 9  | Instruction-count benchmarks with CodSpeed            | `vulcan/benches`  |
-| 10 | Nightly-only fast paths behind `--cfg vulcan_nightly` | `vulcan::hint`    |
-| 11 | Size thresholds before going parallel                 | `vulcan::sync`    |
-| 12 | Per-thread fold, then sharded lock-free merge         | `vulcan::sync`    |
-| 13 | Lazily built, named rayon pool; no pool for 1 thread  | `vulcan::sync`    |
-| 14 | Diagnostics buffered per task, committed in order     | `vulcan::diag`    |
-| 15 | `ErrorGuaranteed` zero-sized error proof              | `vulcan::diag`    |
-| 16 | Caches picked by key type (dense slots for indices)   | `vulcan::cache`   |
-| 17 | `collect_and_apply`: 0 to 8 items without the heap    | `vulcan::collect` |
-| 18 | `Never` on stable, infallible `ControlFlow`/`Result`  | `vulcan::never`   |
-| 19 | `Span` aligned to 4 bytes (`packed(4)`)               | `vulcan::layout`  |
+| #  | Pattern                                                 | Module / file       |
+| -- | ------------------------------------------------------- | ------------------- |
+| 1  | Optional global allocator (mimalloc, jemalloc)          | `vulcan::alloc`     |
+| 2  | Bump arenas, one per thread                             | `vulcan::arena`     |
+| 3  | Niche-optimized index newtypes and `IndexVec`           | `vulcan::index`     |
+| 4  | Interning (`Symbol`, pointer-identity `Interned`)       | `vulcan::intern`    |
+| 5  | Compile-time type size assertions                       | `vulcan::layout`    |
+| 6  | Branch hints and cold-path outlining                    | `vulcan::hint`      |
+| 7  | Lookup-table byte classification, `memchr` scans        | `vulcan::bytes`     |
+| 8  | Opt-in rayon scope and ordered `par_try_map`            | `vulcan::sync`      |
+| 9  | Instruction-count benchmarks with CodSpeed              | `vulcan/benches`    |
+| 10 | Nightly-only fast paths behind `--cfg vulcan_nightly`   | `vulcan::hint`      |
+| 11 | Size thresholds before going parallel                   | `vulcan::sync`      |
+| 12 | Per-thread fold, then sharded lock-free merge           | `vulcan::sync`      |
+| 13 | Lazily built, named rayon pool; no pool for 1 thread    | `vulcan::sync`      |
+| 14 | Diagnostics buffered per task, committed in order       | `vulcan::diag`      |
+| 15 | `ErrorGuaranteed` zero-sized error proof                | `vulcan::diag`      |
+| 16 | Caches picked by key type (dense slots for indices)     | `vulcan::cache`     |
+| 17 | `collect_and_apply`: 0 to 8 items without the heap      | `vulcan::collect`   |
+| 18 | `Never` on stable, infallible `ControlFlow`/`Result`    | `vulcan::never`     |
+| 19 | `Span` aligned to 4 bytes (`packed(4)`)                 | `vulcan::layout`    |
+| 20 | `symbols!` pre-interned constants                       | `vulcan::intern`    |
+| 21 | Slice and flagged interners over an arena               | `vulcan::intern`    |
+| 22 | `DenseBitSet` over typed indices, inline up to 128 bits | `vulcan::bit_set`   |
+| 23 | Recursion bounded by a depth counter                    | `vulcan::recursion` |
 
 ## Principles
 

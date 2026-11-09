@@ -37,11 +37,11 @@ Thumbs.db
 .claude/
 CLAUDE.local.md
 
-# Node (si applicable)
+# Node (if applicable)
 node_modules/
 *.tgz
 
-# Python (si applicable)
+# Python (if applicable)
 __pycache__/
 *.py[cod]
 *$py.class
@@ -70,4 +70,3 @@ test-data/
 _
 *.zip
 *.tar.gz
-paradigm-config-analysis.md

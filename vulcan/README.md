@@ -1,7 +1,10 @@
 # vulcan
 
-Minimal example package for the Vulcan workspace template.
+Safe, benchmarked performance building blocks for hot-path Rust code: arenas, interning, typed
+indices, bit sets, byte scanning, ordered parallelism and deferred diagnostics.
 
-This package exists to ensure CI workflows execute successfully and demonstrate workspace configuration.
+Each module is independent. Keep the ones your project needs, delete the rest, and add your own
+crates next to this one in the workspace.
 
-Replace or remove this package when building your project.
+See [docs/PERFORMANCE.md](../docs/PERFORMANCE.md) for the full list and the coding conventions that
+go with them.

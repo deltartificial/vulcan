@@ -1,6 +1,17 @@
 # Vulcan
 
-Ultra-strict, performance-first Rust workspace template for AI-assisted development.
+Ultra-strict, performance-first Rust workspace template for hot-path code, built for AI-assisted development.
+
+## Who This Is For
+
+Vulcan is not a general-purpose starter. Use it when speed is the product:
+
+- Compilers, parsers, interpreters and static analyzers
+- Trading, pricing and other low-latency financial systems
+- Blockchain clients, execution engines, indexers and provers
+- Any service or library where allocation, layout and parallelism decide the result
+
+For a CRUD service, a CLI or a prototype, the lints and conventions here cost more than they give: pick a lighter template.
 
 ## Philosophy
 
@@ -10,13 +21,13 @@ Key principles:
 
 - Force simpler code through aggressive complexity thresholds
 - Ban error handling footguns (`unwrap`, `expect`, `panic`)
-- Require fast alternatives (`parking_lot::Mutex`, `foldhash::HashMap`)
+- Require fast alternatives (`parking_lot::Mutex`, `rustc_hash::FxHashMap`)
 - Enforce exhaustive pattern matching and explicit error handling
 - Use `tracing` instead of `println!` for logging
 - Allocate less, keep types small, keep the hot path hot, parallelize deterministically
-- No `unsafe`: the `vulcan` crate is `#![forbid(unsafe_code)]`
+- No `unsafe`: `unsafe_code` is forbidden for the whole workspace
 
-Target use case: AI code generation where flexibility leads to bugs, inconsistent patterns and slow code.
+Target use case: AI code generation on performance-critical code, where flexibility leads to bugs, inconsistent patterns and slow code.
 
 ## Quick Start
 
@@ -30,7 +41,7 @@ Or click "Use this template" on GitHub.
 
 ### Strict Linting
 
-- 120+ clippy lints enabled (nursery, pedantic, restriction groups)
+- 110+ clippy lints enabled (nursery, pedantic, restriction groups)
 - Ban `unwrap_used`, `expect_used`, `panic` in production code
 - Enforce explicit clones (`Rc::clone()`, `Arc::clone()`)
 - Require exhaustive pattern matching (no wildcard enum arms)
@@ -51,7 +62,7 @@ too-many-lines-threshold = 75 # Default: 100
 | ------------------------------ | ------------------------------------------------ |
 | `std::sync::Mutex`             | `parking_lot::Mutex` (1.5x faster, no poisoning) |
 | `std::sync::RwLock`            | `parking_lot::RwLock` (5x faster)                |
-| `std::collections::HashMap`    | `foldhash::HashMap` or `rustc_hash::FxHashMap`   |
+| `std::collections::HashMap`    | `rustc_hash::FxHashMap` or `foldhash::HashMap`   |
 | `std::collections::LinkedList` | `Vec` or `VecDeque`                              |
 
 ### Disallowed Methods and Macros
@@ -90,27 +101,28 @@ Nightly-only fast paths are enabled with `RUSTFLAGS="--cfg vulcan_nightly"` (not
 
 | Tool                | Purpose                                  |
 | ------------------- | ---------------------------------------- |
-| clippy              | Nightly with 120+ lints                  |
+| clippy              | Nightly with 110+ lints                  |
 | rustfmt             | Nightly, `imports_granularity = "Crate"` |
 | cargo-deny          | License auditing, OpenSSL banned         |
 | cargo-semver-checks | API stability verification               |
-| cargo-fuzz          | Fuzzing infrastructure                   |
+| cargo-fuzz          | Fuzz target built and smoke-run in CI    |
 | dprint              | TOML/Markdown/JSON formatting            |
 | typos               | Spell checking                           |
 | nextest             | Test runner with retries                 |
-| cross               | Cross-compilation (aarch64, riscv64)     |
+| cross               | Local cross-compilation (`Cross.toml`)   |
 | miri                | Undefined behavior detection             |
+| zepter              | Feature propagation across crates        |
 | CodSpeed            | Instruction-count benchmarks on every PR |
 
 ## CI
 
 ### Lint Workflow
 
-Clippy, rustfmt, documentation, typos, cargo-deny, dprint, miri, fuzzing, semver checks, external types, cargo-sort, `--cfg vulcan_nightly` build.
+Clippy, rustfmt, documentation, typos, cargo-deny, dprint, unused dependencies, feature powerset, feature propagation, cargo-sort, wasm32-wasip1 check, miri, fuzzing, `--cfg vulcan_nightly` build. Semver checks run as advisory until the crates are published.
 
 ### Test Workflow
 
-Nextest, doctests, MSRV check (1.93), Valgrind, AddressSanitizer, minimal versions, multi-platform (Linux/macOS/Windows), cross-compilation.
+Nextest on Linux, macOS and Windows, doctests, MSRV check (1.93), minimal versions, AddressSanitizer.
 
 ### Bench Workflow
 
@@ -120,7 +132,7 @@ CodSpeed runs `vulcan/benches` in simulation mode and reports the diff against `
 
 Conventional commit format required.
 
-All workflows use sccache, mold linker, and alls-green gate jobs.
+Build jobs use sccache and the mold linker; `lint` and `test` end with an alls-green gate job.
 
 ## Configuration
 
@@ -128,7 +140,7 @@ All workflows use sccache, mold linker, and alls-green gate jobs.
 | --------------------- | -------------------------------------------------- |
 | `Cargo.toml`          | Workspace lints, profiles, MSRV (1.93)             |
 | `clippy.toml`         | Strict thresholds, disallowed types/methods/macros |
-| `Cross.toml`          | Cross-compilation setup                            |
+| `Cross.toml`          | Cross-compilation setup (aarch64, riscv64)         |
 | `dprint.json`         | Multi-format code formatting                       |
 | `typos.toml`          | Spell checking configuration                       |
 | `.editorconfig`       | Editor consistency                                 |

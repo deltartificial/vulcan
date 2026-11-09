@@ -1,6 +1,8 @@
 # Vulcan
 
-Vulcan is a Rust workspace project.
+Vulcan is a performance-first Rust workspace template for hot-path code: compilers and parsers,
+trading and other low-latency financial systems, blockchain clients. The `vulcan` crate holds the
+performance building blocks; speed and strictness come before convenience.
 
 ## Development Workflow
 
@@ -26,8 +28,8 @@ make test                              # all tests via Makefile
 ```bash
 cargo +nightly fmt --all               # format
 cargo +nightly clippy --workspace --all-targets --all-features  # lint
-make lint                              # all linters (fmt, clippy, typos, deny, dprint)
-make pr                                # full pre-PR check
+make lint                              # fmt, clippy, typos, dprint
+make pr                                # full pre-PR check (adds deny, udeps, hack, zepter, tests, docs)
 ```
 
 ### Pre-PR Checklist
@@ -87,12 +89,15 @@ Rust workspace with strict tooling:
 - **dprint** (TOML/markdown/JSON formatting)
 - **typos** (spell checking with hex address exclusions)
 - **nextest** (test runner with retry/timeout policies)
-- **cross** (cross-compilation for aarch64, riscv64)
+- **cross** (local cross-compilation for aarch64, riscv64; not run in CI)
 
 ## CI
 
 CI runs on every PR and push to main:
 
-- **lint.yml**: clippy, fmt, docs, typos, deny, dprint, with `lint-success` gate
-- **test.yml**: nextest, doctest, MSRV (1.93) check, with `test-success` gate
+- **lint.yml**: clippy, fmt, docs, typos, deny, dprint, udeps, feature checks, wasm, miri, fuzzing,
+  with `lint-success` gate
+- **test.yml**: nextest (Linux/macOS/Windows), doctest, MSRV (1.93), minimal versions, ASan, with
+  `test-success` gate
+- **bench.yml**: CodSpeed instruction-count benchmarks
 - **pr-title.yml**: conventional commit enforcement on PR titles

@@ -9,14 +9,14 @@ cargo-fuzz = true
 
 [dependencies]
 libfuzzer-sys = "0.4"
-
-# Add your workspace crates here for fuzzing
-# [dependencies.your-crate]
-# path = ".."
+vulcan = { path = "../vulcan" }
 
 [[bin]]
-name = "example_fuzz"
-path = "fuzz_targets/example_fuzz.rs"
+name = "cursor"
+path = "fuzz_targets/cursor.rs"
 test = false
 doc = false
 bench = false
+
+# Kept out of the root workspace: fuzz targets need nightly and sanitizer flags.
+[workspace]
