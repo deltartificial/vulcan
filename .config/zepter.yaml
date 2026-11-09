@@ -1,0 +1,26 @@
+version:
+  format: 1
+  # Minimum zepter version expected to work with this file.
+  binary: 0.13.2
+
+workflows:
+  check:
+    - [
+        "lint",
+        # Check that a crate with one of these features forwards it to its dependencies.
+        "propagate-feature",
+        "--features=mimalloc,jemalloc",
+        # Do not require a crate to grow a feature only because a dependency has it.
+        "--left-side-feature-missing=ignore",
+        "--left-side-outside-workspace=ignore",
+        "--show-path",
+        "--quiet",
+      ]
+  default:
+    - [$check.0, "--fix"]
+
+help:
+  text: |
+    Vulcan uses zepter to check that Cargo features are propagated across workspace crates.
+    Run `zepter` to fix what it reports.
+  links: []

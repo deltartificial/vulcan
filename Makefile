@@ -1,12 +1,8 @@
 .DEFAULT_GOAL := help
 
-GIT_SHA ?= $(shell git rev-parse HEAD)
-GIT_TAG ?= $(shell git describe --tags --abbrev=0 2>/dev/null || echo "dev")
 BIN_DIR = dist/bin
-CARGO_TARGET_DIR ?= target
 PROFILE ?= dev
 FEATURES ?=
-CARGO_INSTALL_EXTRA_FLAGS ?=
 
 ##@ Help
 
@@ -101,7 +97,7 @@ zepter: ## Check feature propagation with zepter.
 	zepter run check
 
 .PHONY: lint
-lint: ## Run ALL linters (fmt + clippy + typos + toml).
+lint: ## Format, then run clippy, typos and dprint (`make pr` adds deny, udeps, hack, zepter).
 	$(MAKE) fmt && \
 	$(MAKE) clippy && \
 	$(MAKE) lint-typos && \
@@ -111,7 +107,7 @@ lint: ## Run ALL linters (fmt + clippy + typos + toml).
 
 .PHONY: test-unit
 test-unit: ## Run unit tests with nextest.
-	cargo nextest run --workspace --no-fail-fast
+	cargo nextest run --workspace --all-features --no-fail-fast
 
 .PHONY: test-doc
 test-doc: ## Run doc tests.
@@ -128,15 +124,11 @@ test-coverage: ## Run tests with coverage (requires cargo-llvm-cov).
 	cargo +nightly llvm-cov report --html
 	@echo "Coverage report: target/llvm-cov/html/index.html"
 
-##@ Cross-compilation
+##@ Portability
 
 .PHONY: check-wasm
 check-wasm: ## Check compilation for wasm32-wasip1 target.
 	cargo check --workspace --target wasm32-wasip1
-
-.PHONY: check-riscv
-check-riscv: ## Check compilation for riscv32imac-unknown-none-elf target.
-	cargo check --workspace --target riscv32imac-unknown-none-elf
 
 ##@ Security & Dependencies
 

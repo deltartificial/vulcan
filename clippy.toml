@@ -109,8 +109,8 @@ disallowed-macros = [
 # Enforce faster alternatives to std collections and sync primitives
 disallowed-types = [
   # HashMap/HashSet: use faster alternatives
-  { path = "std::collections::HashMap", reason = "use `foldhash::HashMap` or `rustc_hash::FxHashMap` for better performance" },
-  { path = "std::collections::HashSet", reason = "use `foldhash::HashSet` or `rustc_hash::FxHashSet` for better performance" },
+  { path = "std::collections::HashMap", reason = "use `rustc_hash::FxHashMap` (or `foldhash::HashMap`) for better performance" },
+  { path = "std::collections::HashSet", reason = "use `rustc_hash::FxHashSet` (or `foldhash::HashSet`) for better performance" },
 
   # LinkedList: almost always wrong choice (cache-unfriendly, allocation overhead)
   { path = "std::collections::LinkedList", reason = "use `Vec` or `VecDeque` instead - LinkedList has poor cache locality and rarely justified" },

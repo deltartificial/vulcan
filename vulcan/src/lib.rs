@@ -1,7 +1,10 @@
-//! Vulcan minimal example package.
+//! Performance building blocks for hot-path Rust code.
 //!
-//! This is a placeholder package to demonstrate the workspace configuration
-//! and ensure CI workflows execute successfully.
+//! Safe, benchmarked primitives for code where allocation, layout and parallelism decide the
+//! result: compilers and parsers, trading and pricing engines, blockchain clients, low-latency
+//! services. Each module is independent: keep the ones you need and delete the rest.
+//!
+//! The coding conventions that go with them are in `docs/PERFORMANCE.md`.
 
 #![forbid(unsafe_code)]
 // Nightly-only fast paths, enabled with `RUSTFLAGS="--cfg vulcan_nightly"`. A `--cfg` flag rather
@@ -23,50 +26,3 @@ pub mod layout;
 pub mod never;
 pub mod recursion;
 pub mod sync;
-
-/// Adds two numbers together.
-///
-/// # Examples
-///
-/// ```
-/// use vulcan::add;
-///
-/// assert_eq!(add(2, 3), 5);
-/// ```
-#[must_use]
-pub const fn add(left: u64, right: u64) -> u64 {
-    left + right
-}
-
-/// Multiplies two numbers.
-///
-/// # Examples
-///
-/// ```
-/// use vulcan::multiply;
-///
-/// assert_eq!(multiply(4, 5), 20);
-/// ```
-#[must_use]
-pub const fn multiply(left: u64, right: u64) -> u64 {
-    left * right
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_add() {
-        assert_eq!(add(2, 2), 4);
-        assert_eq!(add(0, 0), 0);
-        assert_eq!(add(1, 1), 2);
-    }
-
-    #[test]
-    fn test_multiply() {
-        assert_eq!(multiply(2, 3), 6);
-        assert_eq!(multiply(0, 5), 0);
-        assert_eq!(multiply(1, 1), 1);
-    }
-}
