@@ -32,13 +32,13 @@ jobs:
         with:
           components: clippy
       - uses: rui314/setup-mold@v1
-      - uses: mozilla-actions/sccache-action@v0.0.9
+      - uses: kunobi-ninja/kache-action@v1
+        with:
+          version: v2.1.1
       - uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
       - run: cargo clippy --workspace --all-targets --all-features --no-deps
-        env:
-          RUSTC_WRAPPER: sccache
 
   fmt:
     name: fmt
@@ -69,13 +69,13 @@ jobs:
           persist-credentials: false
       - uses: dtolnay/rust-toolchain@nightly
       - uses: rui314/setup-mold@v1
-      - uses: mozilla-actions/sccache-action@v0.0.9
+      - uses: kunobi-ninja/kache-action@v1
+        with:
+          version: v2.1.1
       - uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
       - run: cargo doc --workspace --all-features --no-deps --document-private-items
-        env:
-          RUSTC_WRAPPER: sccache
 
   typos:
     name: typos
@@ -125,14 +125,14 @@ jobs:
           persist-credentials: false
       - uses: dtolnay/rust-toolchain@nightly
       - uses: rui314/setup-mold@v1
-      - uses: mozilla-actions/sccache-action@v0.0.9
+      - uses: kunobi-ninja/kache-action@v1
+        with:
+          version: v2.1.1
       - uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
       - uses: taiki-e/install-action@cargo-udeps
       - run: cargo +nightly udeps --workspace --all-features
-        env:
-          RUSTC_WRAPPER: sccache
 
   features:
     name: features
@@ -146,14 +146,14 @@ jobs:
           persist-credentials: false
       - uses: dtolnay/rust-toolchain@stable
       - uses: rui314/setup-mold@v1
-      - uses: mozilla-actions/sccache-action@v0.0.9
+      - uses: kunobi-ninja/kache-action@v1
+        with:
+          version: v2.1.1
       - uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
       - uses: taiki-e/install-action@cargo-hack
       - run: cargo hack check --workspace --feature-powerset --depth 2
-        env:
-          RUSTC_WRAPPER: sccache
 
   cargo-sort:
     name: cargo-sort

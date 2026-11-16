@@ -34,14 +34,14 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: rui314/setup-mold@v1
         if: matrix.os == 'ubuntu-latest'
-      - uses: mozilla-actions/sccache-action@v0.0.9
+      - uses: kunobi-ninja/kache-action@v1
+        with:
+          version: v2.1.1
       - uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
       - uses: taiki-e/install-action@nextest
       - run: cargo nextest run --workspace --all-features
-        env:
-          RUSTC_WRAPPER: sccache
 
   doctest:
     name: doctest
@@ -55,13 +55,13 @@ jobs:
           persist-credentials: false
       - uses: dtolnay/rust-toolchain@stable
       - uses: rui314/setup-mold@v1
-      - uses: mozilla-actions/sccache-action@v0.0.9
+      - uses: kunobi-ninja/kache-action@v1
+        with:
+          version: v2.1.1
       - uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
       - run: cargo test --doc --workspace --all-features
-        env:
-          RUSTC_WRAPPER: sccache
 
   msrv:
     name: msrv
@@ -77,13 +77,13 @@ jobs:
         with:
           toolchain: "1.93"
       - uses: rui314/setup-mold@v1
-      - uses: mozilla-actions/sccache-action@v0.0.9
+      - uses: kunobi-ninja/kache-action@v1
+        with:
+          version: v2.1.1
       - uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
       - run: cargo check --workspace
-        env:
-          RUSTC_WRAPPER: sccache
 
   minimal-versions:
     name: minimal versions
@@ -98,14 +98,14 @@ jobs:
       - uses: dtolnay/rust-toolchain@nightly
       - uses: dtolnay/rust-toolchain@stable
       - uses: rui314/setup-mold@v1
-      - uses: mozilla-actions/sccache-action@v0.0.9
+      - uses: kunobi-ninja/kache-action@v1
+        with:
+          version: v2.1.1
       - uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
       - run: cargo +nightly update -Z minimal-versions
       - run: cargo +stable check --workspace --all-features
-        env:
-          RUSTC_WRAPPER: sccache
 
   asan:
     name: asan
