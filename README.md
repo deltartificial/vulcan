@@ -1,16 +1,26 @@
 # Vulcan
 
-Ultra-strict, performance-first Rust workspace template for hot-path code, built for AI-assisted
-development.
+Ultra-strict, performance-first Rust workspace template for systems where every microsecond and
+every allocation counts: financial infrastructure, high-frequency trading, blockchain, and
+compilers. Built for AI-assisted development.
 
 ## Who This Is For
 
 Vulcan is not a general-purpose starter. Use it when speed is the product:
 
-- Compilers, parsers, interpreters and static analyzers
-- Trading, pricing and other low-latency financial systems
-- Blockchain clients, execution engines, indexers and provers
+- **Financial systems**: matching engines, order management, pricing and risk engines, market data
+  feed handlers, payment and settlement rails
+- **High-frequency and algorithmic trading**: strategy engines, order routers, exchange gateways,
+  tick-to-trade paths where tail latency decides the fill
+- **Blockchain**: clients and nodes, execution engines and VMs, mempools, indexers, provers, MEV
+  searchers and builders
+- **Compilers and language tooling**: parsers, type checkers, interpreters, static analyzers,
+  formatters and linters
 - Any service or library where allocation, layout and parallelism decide the result
+
+These domains share the same constraints: predictable latency, no allocation on the hot path,
+deterministic output, and a crash rather than a silently wrong result. Vulcan encodes them as lints,
+style checks and building blocks.
 
 For a CRUD service, a CLI or a prototype, the lints and conventions here cost more than they give:
 pick a lighter template.

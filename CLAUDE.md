@@ -1,8 +1,8 @@
 # Vulcan
 
-Vulcan is a performance-first Rust workspace template for hot-path code: compilers and parsers,
-trading and other low-latency financial systems, blockchain clients. The `vulcan` crate holds the
-performance building blocks; speed and strictness come before convenience.
+Vulcan is a performance-first Rust workspace template for hot-path code: financial systems,
+high-frequency trading, blockchain clients and execution engines, compilers and parsers. The
+`vulcan` crate holds the performance building blocks; speed and strictness come before convenience.
 
 ## Development Workflow
 

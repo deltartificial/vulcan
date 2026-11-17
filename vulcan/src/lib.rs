@@ -1,8 +1,9 @@
 //! Performance building blocks for hot-path Rust code.
 //!
 //! Safe, benchmarked primitives for code where allocation, layout and parallelism decide the
-//! result: compilers and parsers, trading and pricing engines, blockchain clients, low-latency
-//! services. Each module is independent: keep the ones you need and delete the rest.
+//! result: financial systems, high-frequency trading, blockchain clients and execution engines,
+//! compilers and parsers, low-latency services. Each module is independent: keep the ones you need
+//! and delete the rest.
 //!
 //! The coding rules that go with them are in `docs/CODING.md` and `docs/PERFORMANCE.md`.
 
