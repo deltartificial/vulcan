@@ -16,7 +16,7 @@ normal = ["mimalloc", "tikv-jemallocator"]
 doctest = true
 
 [features]
-# Faster but less portable global allocators. See `vulcan::alloc`.
+# Faster but less portable global allocators. See `vulcan::allocator`.
 mimalloc = ["dep:mimalloc"]
 # Ignored on MSVC targets, where jemalloc does not build.
 jemalloc = ["dep:tikv-jemallocator"]
@@ -30,13 +30,16 @@ indexmap.workspace = true
 memchr.workspace = true
 mimalloc = { workspace = true, optional = true }
 parking_lot.workspace = true
-rayon.workspace = true
 rustc-hash.workspace = true
 smallvec.workspace = true
 thread_local.workspace = true
 
 [dev-dependencies]
 criterion.workspace = true
+
+[[test]]
+name = "static_allocation"
+harness = false
 
 [[bench]]
 name = "perf"

@@ -12,11 +12,218 @@ libfuzzer-sys = "0.4"
 vulcan = { path = "../vulcan" }
 
 [[bin]]
+name = "bit_set"
+path = "fuzz_targets/bit_set.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "bounded"
+path = "fuzz_targets/bounded.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "cache"
+path = "fuzz_targets/cache.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
 name = "cursor"
 path = "fuzz_targets/cursor.rs"
 test = false
 doc = false
 bench = false
+
+[[bin]]
+name = "intern"
+path = "fuzz_targets/intern.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "division"
+path = "fuzz_targets/division.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "sharded_map"
+path = "fuzz_targets/sharded_map.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "index_vec"
+path = "fuzz_targets/index_vec.rs"
+test = false
+doc = false
+bench = false
+
+# The lints of the root workspace, copied because this package is outside it and cannot inherit
+# them. A test of `xtask` keeps the two copies identical. `cargo xtask clippy-fuzz` applies them.
+
+[lints.rust]
+ambiguous_negative_literals = "warn"
+deprecated_in_future = "warn"
+deprecated_safe_2024 = "warn"
+elided_lifetimes_in_paths = "warn"
+explicit_outlives_requirements = "warn"
+ffi_unwind_calls = "warn"
+if_let_rescope = "warn"
+impl_trait_overcaptures = "warn"
+impl_trait_redundant_captures = "warn"
+keyword_idents_2024 = "warn"
+let_underscore_drop = "warn"
+macro_use_extern_crate = "warn"
+meta_variable_misuse = "warn"
+missing_copy_implementations = "warn"
+missing_debug_implementations = "warn"
+missing_docs = "warn"
+missing_unsafe_on_extern = "warn"
+non_ascii_idents = "warn"
+redundant_imports = "warn"
+redundant_lifetimes = "warn"
+rust_2018_idioms = { level = "deny", priority = -1 }
+rust_2024_incompatible_pat = "warn"
+single_use_lifetimes = "warn"
+tail_expr_drop_order = "warn"
+trivial_casts = "warn"
+trivial_numeric_casts = "warn"
+unexpected_cfgs = { level = "warn", check-cfg = ["cfg(vulcan_nightly)"] }
+unit_bindings = "warn"
+unnameable_types = "warn"
+unreachable_pub = "warn"
+# Denied rather than forbidden so that `vulcan::allocator`, the one module that must implement
+# `GlobalAlloc`, can opt in with a reason. Nothing else may.
+unsafe_attr_outside_unsafe = "warn"
+unsafe_code = "deny"
+unsafe_op_in_unsafe_fn = "warn"
+unused_extern_crates = "warn"
+unused_import_braces = "warn"
+unused_lifetimes = "warn"
+unused_macro_rules = "warn"
+unused_must_use = "deny"
+unused_qualifications = "warn"
+unused_results = "warn"
+variant_size_differences = "warn"
+
+[lints.rustdoc]
+all = "warn"
+
+[lints.clippy]
+# Every group, applied first so the single lints below override them.
+cargo = { level = "warn", priority = -1 }
+complexity = { level = "warn", priority = -1 }
+correctness = { level = "deny", priority = -1 }
+nursery = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+perf = { level = "deny", priority = -1 }
+restriction = { level = "warn", priority = -1 }
+style = { level = "warn", priority = -1 }
+suspicious = { level = "warn", priority = -1 }
+
+# Errors are handled, never ignored or turned into a panic.
+expect_used = "deny"
+panic = "deny"
+unwrap_used = "deny"
+
+# No unfinished code is merged.
+dbg_macro = "deny"
+todo = "deny"
+unimplemented = "deny"
+
+# Turned off, each for a reason. Pairs of lints that demand opposite things keep the one that
+# matches rustfmt and the Rust API guidelines.
+# Enabling `restriction` as a whole is the point of this table.
+# Contradict the rule on conditions: nested `if`s and `else { if .. }` trees make every case
+# visible, where `a && b` and `else if` chains hide some.
+collapsible_else_if = "allow"
+collapsible_if = "allow"
+# Asks for `a && b` in place of `if a { b } else { false }`, and there is no `&&`: several
+# conditions are nested `if`s, so every case is a visible branch.
+ifs_as_logical_ops = "allow"
+blanket_clippy_restriction_lints = "allow"
+# Contradicts `needless_return`: Rust ends a block with its value.
+implicit_return = "allow"
+# Contradicts `unseparated_literal_suffix`, which is kept: `1_u32`.
+separated_literal_suffix = "allow"
+# Contradicts `pub_without_shorthand`, which is kept: `pub(crate)`, as rustfmt writes it.
+pub_with_shorthand = "allow"
+# Contradicts `semicolon_inside_block`, which is kept.
+semicolon_outside_block = "allow"
+# Contradicts `ref_patterns`, which is kept: match ergonomics instead of `ref`.
+pattern_type_mismatch = "allow"
+# Contradicts `mod_module_files`, which is kept: `module.rs`, never `module/mod.rs`.
+self_named_module_files = "allow"
+# Declarations are ordered by importance, main types and entry points first (`docs/CODING.md`);
+# this lint orders them by kind and then alphabetically.
+arbitrary_source_item_ordering = "allow"
+# Acronyms are written in capitals (`docs/CODING.md`, naming): `UTF8`, not `Utf8`.
+upper_case_acronyms = "allow"
+# Splitting a function into helpers called once is how functions stay under 70 lines.
+single_call_fn = "allow"
+# `?` is how an operating error is handled and passed to the caller.
+question_mark_used = "allow"
+# Asserting inside a function that returns `Result` is the rule, not a mistake: a `Result` is for
+# operating errors, an assertion for programmer errors.
+panic_in_result_fn = "allow"
+# `unreachable!` is an assertion that a branch cannot be taken; it carries a message.
+unreachable = "allow"
+# Overflow is checked in every profile (`overflow-checks = true`), so every `+`, `-` and `*`
+# already crashes on overflow, like an assertion.
+arithmetic_side_effects = "allow"
+# An out-of-bounds index crashes, like an assertion: `.get()` would add an `Option` that every
+# caller must handle. `missing_asserts_for_indexing` asks for the bound to be asserted first.
+indexing_slicing = "allow"
+# Default trait methods are part of the trait's contract, not options passed at a call site.
+missing_trait_methods = "allow"
+# Inlining across crates is decided by measurement and thin LTO (`docs/PERFORMANCE.md`).
+missing_inline_in_public_items = "allow"
+# Configuration structs are public so callers name every field (`docs/CODING.md`, interfaces);
+# `#[non_exhaustive]` would forbid exactly that.
+exhaustive_enums = "allow"
+exhaustive_structs = "allow"
+# Contradicts `unreachable_pub`: a field seen by its own crate only is `pub(crate)`.
+field_scoped_visibility_modifiers = "allow"
+# Each re-export is the one public path of an item defined in a private module.
+pub_use = "allow"
+# Test modules and per-backend modules stay next to the code they cover or select.
+inline_modules = "allow"
+# Related names of equal length (`source`/`target`) are encouraged, and this lint flags them.
+similar_names = "allow"
+# `diagnostic::DiagnosticContext` reads better than a renamed type.
+module_name_repetitions = "allow"
+# Collecting into a `Vec` before a parallel or arena step is often the point.
+needless_collect = "allow"
+# Large error types are boxed by convention (`docs/CODING.md`), not by this lint's threshold.
+result_large_err = "allow"
+# Fires on guards whose early drop would change behavior.
+significant_drop_in_scrutinee = "allow"
+significant_drop_tightening = "allow"
+# Too many false positives on generic code.
+future_not_send = "allow"
+redundant_pub_crate = "allow"
+# The first doc paragraph is a sentence, sometimes a long one.
+too_long_first_doc_paragraph = "allow"
+# `unwrap_or` is banned through `disallowed-methods`; these lints would suggest it.
+manual_unwrap_or = "allow"
+map_or_identity = "allow"
+# `assert!(items.is_empty(), "why")` reads better than a comparison with a typed empty array.
+assert_is_empty = "allow"
+# Constructors have no `Default`: options are passed explicitly (`docs/CODING.md`, interfaces).
+new_without_default = "allow"
+# The workspace is not published to crates.io, so package metadata is not required.
+cargo_common_metadata = "allow"
+# Several versions of one crate come from dependencies, which this template cannot change.
+multiple_crate_versions = "allow"
 
 # Kept out of the root workspace: fuzz targets need nightly and sanitizer flags.
 [workspace]

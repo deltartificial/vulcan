@@ -1,143 +1,143 @@
 name: test
 
 on:
-  push:
-    branches: [main]
-  pull_request:
-  merge_group:
+    push:
+        branches: [main]
+    pull_request:
+    merge_group:
 
 permissions: {}
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
-  cancel-in-progress: true
+    group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+    cancel-in-progress: true
 
 env:
-  CARGO_TERM_COLOR: always
-  RUST_BACKTRACE: 1
+    CARGO_TERM_COLOR: always
+    RUST_BACKTRACE: 1
 
 jobs:
-  test:
-    name: test (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 30
-    permissions:
-      contents: read
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: rui314/setup-mold@v1
-        if: matrix.os == 'ubuntu-latest'
-      - uses: kunobi-ninja/kache-action@v1
-        with:
-          version: v2.1.1
-      - uses: Swatinem/rust-cache@v2
-        with:
-          cache-on-failure: true
-      - uses: taiki-e/install-action@nextest
-      - run: cargo nextest run --workspace --all-features
+    test:
+        name: test (${{ matrix.os }})
+        runs-on: ${{ matrix.os }}
+        timeout-minutes: 30
+        permissions:
+            contents: read
+        strategy:
+            fail-fast: false
+            matrix:
+                os: [ubuntu-latest, macos-latest, windows-latest]
+        steps:
+            - uses: actions/checkout@v4
+              with:
+                  persist-credentials: false
+            - uses: dtolnay/rust-toolchain@stable
+            - uses: rui314/setup-mold@v1
+              if: matrix.os == 'ubuntu-latest'
+            - uses: kunobi-ninja/kache-action@v1
+              with:
+                  version: v2.1.1
+            - uses: Swatinem/rust-cache@v2
+              with:
+                  cache-on-failure: true
+            - uses: taiki-e/install-action@nextest
+            - run: cargo nextest run --workspace --all-features
 
-  doctest:
-    name: doctest
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: rui314/setup-mold@v1
-      - uses: kunobi-ninja/kache-action@v1
-        with:
-          version: v2.1.1
-      - uses: Swatinem/rust-cache@v2
-        with:
-          cache-on-failure: true
-      - run: cargo test --doc --workspace --all-features
+    doctest:
+        name: doctest
+        runs-on: ubuntu-latest
+        timeout-minutes: 30
+        permissions:
+            contents: read
+        steps:
+            - uses: actions/checkout@v4
+              with:
+                  persist-credentials: false
+            - uses: dtolnay/rust-toolchain@stable
+            - uses: rui314/setup-mold@v1
+            - uses: kunobi-ninja/kache-action@v1
+              with:
+                  version: v2.1.1
+            - uses: Swatinem/rust-cache@v2
+              with:
+                  cache-on-failure: true
+            - run: cargo test --doc --workspace --all-features
 
-  msrv:
-    name: msrv
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-      - uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: "1.93"
-      - uses: rui314/setup-mold@v1
-      - uses: kunobi-ninja/kache-action@v1
-        with:
-          version: v2.1.1
-      - uses: Swatinem/rust-cache@v2
-        with:
-          cache-on-failure: true
-      - run: cargo check --workspace
+    msrv:
+        name: msrv
+        runs-on: ubuntu-latest
+        timeout-minutes: 30
+        permissions:
+            contents: read
+        steps:
+            - uses: actions/checkout@v4
+              with:
+                  persist-credentials: false
+            - uses: dtolnay/rust-toolchain@master
+              with:
+                  toolchain: "1.93"
+            - uses: rui314/setup-mold@v1
+            - uses: kunobi-ninja/kache-action@v1
+              with:
+                  version: v2.1.1
+            - uses: Swatinem/rust-cache@v2
+              with:
+                  cache-on-failure: true
+            - run: cargo check --workspace
 
-  minimal-versions:
-    name: minimal versions
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-      - uses: dtolnay/rust-toolchain@nightly
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: rui314/setup-mold@v1
-      - uses: kunobi-ninja/kache-action@v1
-        with:
-          version: v2.1.1
-      - uses: Swatinem/rust-cache@v2
-        with:
-          cache-on-failure: true
-      - run: cargo +nightly update -Z minimal-versions
-      - run: cargo +stable check --workspace --all-features
+    minimal-versions:
+        name: minimal versions
+        runs-on: ubuntu-latest
+        timeout-minutes: 30
+        permissions:
+            contents: read
+        steps:
+            - uses: actions/checkout@v4
+              with:
+                  persist-credentials: false
+            - uses: dtolnay/rust-toolchain@nightly
+            - uses: dtolnay/rust-toolchain@stable
+            - uses: rui314/setup-mold@v1
+            - uses: kunobi-ninja/kache-action@v1
+              with:
+                  version: v2.1.1
+            - uses: Swatinem/rust-cache@v2
+              with:
+                  cache-on-failure: true
+            - run: cargo +nightly update -Z minimal-versions
+            - run: cargo +stable check --workspace --all-features
 
-  asan:
-    name: asan
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-      - uses: dtolnay/rust-toolchain@nightly
-      - uses: Swatinem/rust-cache@v2
-        with:
-          cache-on-failure: true
-      - run: cargo +nightly test --workspace --target x86_64-unknown-linux-gnu
-        env:
-          RUSTFLAGS: -Zsanitizer=address
-          RUSTDOCFLAGS: -Zsanitizer=address
+    asan:
+        name: asan
+        runs-on: ubuntu-latest
+        timeout-minutes: 30
+        permissions:
+            contents: read
+        steps:
+            - uses: actions/checkout@v4
+              with:
+                  persist-credentials: false
+            - uses: dtolnay/rust-toolchain@nightly
+            - uses: Swatinem/rust-cache@v2
+              with:
+                  cache-on-failure: true
+            - run: cargo +nightly test --workspace --target x86_64-unknown-linux-gnu
+              env:
+                  RUSTFLAGS: -Zsanitizer=address
+                  RUSTDOCFLAGS: -Zsanitizer=address
 
-  test-success:
-    name: test success
-    runs-on: ubuntu-latest
-    if: always()
-    needs:
-      - test
-      - doctest
-      - msrv
-      - minimal-versions
-      - asan
-    timeout-minutes: 5
-    steps:
-      - uses: re-actors/alls-green@release/v1
-        with:
-          jobs: ${{ toJSON(needs) }}
+    test-success:
+        name: test success
+        runs-on: ubuntu-latest
+        if: always()
+        needs:
+            - test
+            - doctest
+            - msrv
+            - minimal-versions
+            - asan
+        timeout-minutes: 5
+        steps:
+            - uses: re-actors/alls-green@release/v1
+              with:
+                  jobs: ${{ toJSON(needs) }}

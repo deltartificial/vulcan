@@ -1,328 +1,363 @@
 name: lint
 
 on:
-  push:
-    branches: [main]
-  pull_request:
-  merge_group:
+    push:
+        branches: [main]
+    pull_request:
+    merge_group:
 
 permissions: {}
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
-  cancel-in-progress: true
+    group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+    cancel-in-progress: true
 
 env:
-  CARGO_TERM_COLOR: always
-  RUST_BACKTRACE: 1
-  RUSTFLAGS: -Dwarnings
+    CARGO_TERM_COLOR: always
+    RUST_BACKTRACE: 1
+    RUSTFLAGS: --deny warnings
 
 jobs:
-  clippy:
-    name: clippy
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-      - uses: dtolnay/rust-toolchain@nightly
-        with:
-          components: clippy
-      - uses: rui314/setup-mold@v1
-      - uses: kunobi-ninja/kache-action@v1
-        with:
-          version: v2.1.1
-      - uses: Swatinem/rust-cache@v2
-        with:
-          cache-on-failure: true
-      - run: cargo clippy --workspace --all-targets --all-features --no-deps
+    clippy:
+        name: clippy
+        runs-on: ubuntu-latest
+        timeout-minutes: 30
+        permissions:
+            contents: read
+        steps:
+            - uses: actions/checkout@v4
+              with:
+                  persist-credentials: false
+            - uses: dtolnay/rust-toolchain@nightly
+              with:
+                  components: clippy
+            - uses: rui314/setup-mold@v1
+            - uses: kunobi-ninja/kache-action@v1
+              with:
+                  version: v2.1.1
+            - uses: Swatinem/rust-cache@v2
+              with:
+                  cache-on-failure: true
+            - run: cargo xtask clippy
+            # The fuzz targets are a package of their own, outside the workspace.
+            - run: cargo xtask clippy-fuzz
 
-  fmt:
-    name: fmt
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-      - uses: dtolnay/rust-toolchain@nightly
-        with:
-          components: rustfmt
-      - run: cargo fmt --all --check
+    fmt:
+        name: fmt
+        runs-on: ubuntu-latest
+        timeout-minutes: 10
+        permissions:
+            contents: read
+        steps:
+            - uses: actions/checkout@v4
+              with:
+                  persist-credentials: false
+            - uses: dtolnay/rust-toolchain@nightly
+              with:
+                  components: rustfmt
+            - run: cargo xtask fmt-check
 
-  docs:
-    name: docs
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    permissions:
-      contents: read
-    env:
-      RUSTDOCFLAGS: --cfg docsrs --show-type-layout --generate-link-to-definition --enable-index-page -Zunstable-options -Dwarnings -Drustdoc::all
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-      - uses: dtolnay/rust-toolchain@nightly
-      - uses: rui314/setup-mold@v1
-      - uses: kunobi-ninja/kache-action@v1
-        with:
-          version: v2.1.1
-      - uses: Swatinem/rust-cache@v2
-        with:
-          cache-on-failure: true
-      - run: cargo doc --workspace --all-features --no-deps --document-private-items
+    docs:
+        name: docs
+        runs-on: ubuntu-latest
+        timeout-minutes: 30
+        permissions:
+            contents: read
+        steps:
+            - uses: actions/checkout@v4
+              with:
+                  persist-credentials: false
+            - uses: dtolnay/rust-toolchain@nightly
+            - uses: rui314/setup-mold@v1
+            - uses: kunobi-ninja/kache-action@v1
+              with:
+                  version: v2.1.1
+            - uses: Swatinem/rust-cache@v2
+              with:
+                  cache-on-failure: true
+            - run: cargo xtask docs
 
-  typos:
-    name: typos
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-      - uses: crate-ci/typos@v1
+    style:
+        name: style
+        runs-on: ubuntu-latest
+        timeout-minutes: 10
+        permissions:
+            contents: read
+        steps:
+            - uses: actions/checkout@v4
+              with:
+                  persist-credentials: false
+            - uses: dtolnay/rust-toolchain@stable
+            - uses: Swatinem/rust-cache@v2
+              with:
+                  cache-on-failure: true
+            # The text and code rules that clippy and rustfmt lack.
+            - run: cargo xtask style
 
-  deny:
-    name: deny
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-      - uses: EmbarkStudios/cargo-deny-action@v2
+    typos:
+        name: typos
+        runs-on: ubuntu-latest
+        timeout-minutes: 5
+        permissions:
+            contents: read
+        steps:
+            - uses: actions/checkout@v4
+              with:
+                  persist-credentials: false
+            - uses: crate-ci/typos@v1
 
-  check-toml:
-    name: check toml
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-      - uses: dprint/check@v2.2
+    deny:
+        name: deny
+        runs-on: ubuntu-latest
+        timeout-minutes: 10
+        permissions:
+            contents: read
+        steps:
+            - uses: actions/checkout@v4
+              with:
+                  persist-credentials: false
+            - uses: EmbarkStudios/cargo-deny-action@v2
 
-  udeps:
-    name: udeps
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-      - uses: dtolnay/rust-toolchain@nightly
-      - uses: rui314/setup-mold@v1
-      - uses: kunobi-ninja/kache-action@v1
-        with:
-          version: v2.1.1
-      - uses: Swatinem/rust-cache@v2
-        with:
-          cache-on-failure: true
-      - uses: taiki-e/install-action@cargo-udeps
-      - run: cargo +nightly udeps --workspace --all-features
+    check-toml:
+        name: check toml
+        runs-on: ubuntu-latest
+        timeout-minutes: 5
+        permissions:
+            contents: read
+        steps:
+            - uses: actions/checkout@v4
+              with:
+                  persist-credentials: false
+            - uses: dprint/check@v2.2
 
-  features:
-    name: features
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: rui314/setup-mold@v1
-      - uses: kunobi-ninja/kache-action@v1
-        with:
-          version: v2.1.1
-      - uses: Swatinem/rust-cache@v2
-        with:
-          cache-on-failure: true
-      - uses: taiki-e/install-action@cargo-hack
-      - run: cargo hack check --workspace --feature-powerset --depth 2
+    udeps:
+        name: udeps
+        runs-on: ubuntu-latest
+        timeout-minutes: 30
+        permissions:
+            contents: read
+        steps:
+            - uses: actions/checkout@v4
+              with:
+                  persist-credentials: false
+            - uses: dtolnay/rust-toolchain@nightly
+            - uses: rui314/setup-mold@v1
+            - uses: kunobi-ninja/kache-action@v1
+              with:
+                  version: v2.1.1
+            - uses: Swatinem/rust-cache@v2
+              with:
+                  cache-on-failure: true
+            - uses: taiki-e/install-action@cargo-udeps
+            - run: cargo xtask udeps
 
-  cargo-sort:
-    name: cargo-sort
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-      - uses: dtolnay/rust-toolchain@stable
-      - run: cargo install cargo-sort --locked
-      - run: cargo sort --check --workspace
+    features:
+        name: features
+        runs-on: ubuntu-latest
+        timeout-minutes: 30
+        permissions:
+            contents: read
+        steps:
+            - uses: actions/checkout@v4
+              with:
+                  persist-credentials: false
+            - uses: dtolnay/rust-toolchain@stable
+            - uses: rui314/setup-mold@v1
+            - uses: kunobi-ninja/kache-action@v1
+              with:
+                  version: v2.1.1
+            - uses: Swatinem/rust-cache@v2
+              with:
+                  cache-on-failure: true
+            - uses: taiki-e/install-action@cargo-hack
+            - run: cargo xtask hack
 
-  semver:
-    name: semver
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: obi1kenobi/cargo-semver-checks-action@v2
-        with:
-          package: --workspace
-        # Advisory until the crates are published: there is no registry baseline to diff against.
-        continue-on-error: true
+    cargo-sort:
+        name: cargo-sort
+        runs-on: ubuntu-latest
+        timeout-minutes: 10
+        permissions:
+            contents: read
+        steps:
+            - uses: actions/checkout@v4
+              with:
+                  persist-credentials: false
+            - uses: dtolnay/rust-toolchain@stable
+            - run: cargo install cargo-sort --locked
+            - run: cargo xtask sort-check
 
-  feature-propagation:
-    name: feature propagation
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-      - uses: dtolnay/rust-toolchain@stable
-      - run: cargo install zepter --locked
-      - run: zepter run check
+    semver:
+        name: semver
+        runs-on: ubuntu-latest
+        timeout-minutes: 20
+        permissions:
+            contents: read
+        steps:
+            - uses: actions/checkout@v4
+              with:
+                  persist-credentials: false
+            - uses: dtolnay/rust-toolchain@stable
+            - uses: obi1kenobi/cargo-semver-checks-action@v2
+              with:
+                  package: --workspace
+              # Advisory until the crates are published: there is no registry baseline to diff
+              # against.
+              continue-on-error: true
 
-  wasm:
-    name: wasm
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: wasm32-wasip1
-      - uses: Swatinem/rust-cache@v2
-        with:
-          cache-on-failure: true
-      - run: cargo check --workspace --target wasm32-wasip1
+    feature-propagation:
+        name: feature propagation
+        runs-on: ubuntu-latest
+        timeout-minutes: 15
+        permissions:
+            contents: read
+        steps:
+            - uses: actions/checkout@v4
+              with:
+                  persist-credentials: false
+            - uses: dtolnay/rust-toolchain@stable
+            - run: cargo install zepter --locked
+            - run: cargo xtask zepter
 
-  no-test-deps:
-    name: no test deps
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-      - uses: dtolnay/rust-toolchain@stable
-      - name: Ensure test-only dependencies do not leak into production
-        run: |
-          if cargo tree --workspace -e normal,build --no-default-features 2>/dev/null | grep -qE "arbitrary|proptest"; then
-            echo "::error::Found test-only dependencies (arbitrary/proptest) in non-dev dependency tree"
-            cargo tree --workspace -e normal,build --no-default-features | grep -E "arbitrary|proptest"
-            exit 1
-          fi
+    wasm:
+        name: wasm
+        runs-on: ubuntu-latest
+        timeout-minutes: 30
+        permissions:
+            contents: read
+        steps:
+            - uses: actions/checkout@v4
+              with:
+                  persist-credentials: false
+            - uses: dtolnay/rust-toolchain@stable
+              with:
+                  targets: wasm32-wasip1
+            - uses: Swatinem/rust-cache@v2
+              with:
+                  cache-on-failure: true
+            - run: cargo xtask wasm
 
-  miri:
-    name: miri
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-      - uses: dtolnay/rust-toolchain@nightly
-        with:
-          components: miri
-      - uses: Swatinem/rust-cache@v2
-        with:
-          cache-on-failure: true
-      - run: cargo miri test --workspace
+    no-test-deps:
+        name: no test deps
+        runs-on: ubuntu-latest
+        timeout-minutes: 10
+        permissions:
+            contents: read
+        steps:
+            - uses: actions/checkout@v4
+              with:
+                  persist-credentials: false
+            - uses: dtolnay/rust-toolchain@stable
+            - run: cargo xtask no-test-deps
 
-  fuzzing:
-    name: fuzzing
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-      - uses: dtolnay/rust-toolchain@nightly
-      - uses: Swatinem/rust-cache@v2
-        with:
-          cache-on-failure: true
-      - uses: taiki-e/install-action@v2
-        with:
-          tool: cargo-fuzz
-      - run: cargo fuzz build --fuzz-dir fuzz
-      # A short smoke run: long campaigns belong in a scheduled job, not in PR CI.
-      - run: cargo fuzz run --fuzz-dir fuzz cursor -- -max_total_time=20
+    miri:
+        name: miri
+        runs-on: ubuntu-latest
+        timeout-minutes: 30
+        permissions:
+            contents: read
+        steps:
+            - uses: actions/checkout@v4
+              with:
+                  persist-credentials: false
+            - uses: dtolnay/rust-toolchain@nightly
+              with:
+                  components: miri
+            - uses: Swatinem/rust-cache@v2
+              with:
+                  cache-on-failure: true
+            - run: cargo xtask miri
 
-  nightly-cfg:
-    name: nightly cfg
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    permissions:
-      contents: read
-    env:
-      RUSTFLAGS: --cfg vulcan_nightly -Dwarnings
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-      - uses: dtolnay/rust-toolchain@nightly
-        with:
-          components: clippy
-      - uses: rui314/setup-mold@v1
-      - uses: Swatinem/rust-cache@v2
-        with:
-          cache-on-failure: true
-      - uses: taiki-e/install-action@nextest
-      - run: cargo clippy --workspace --all-targets --all-features --no-deps
-      - run: cargo nextest run --workspace --all-features
-      - run: cargo test --doc --workspace --all-features
+    fuzzing:
+        name: fuzzing
+        runs-on: ubuntu-latest
+        timeout-minutes: 15
+        permissions:
+            contents: read
+        steps:
+            - uses: actions/checkout@v4
+              with:
+                  persist-credentials: false
+            - uses: dtolnay/rust-toolchain@nightly
+            - uses: Swatinem/rust-cache@v2
+              with:
+                  cache-on-failure: true
+            - uses: taiki-e/install-action@v2
+              with:
+                  tool: cargo-fuzz
+            # A short smoke run of every target: long campaigns belong in a scheduled job, not in
+            # pull request CI.
+            - run: cargo xtask fuzz
 
-  lint-success:
-    name: lint success
-    runs-on: ubuntu-latest
-    if: always()
-    needs:
-      - clippy
-      - fmt
-      - docs
-      - typos
-      - deny
-      - check-toml
-      - udeps
-      - features
-      - cargo-sort
-      - semver
-      - feature-propagation
-      - wasm
-      - no-test-deps
-      - miri
-      - fuzzing
-      - nightly-cfg
-    timeout-minutes: 5
-    steps:
-      - uses: re-actors/alls-green@release/v1
-        with:
-          jobs: ${{ toJSON(needs) }}
+    nightly-cfg:
+        name: nightly cfg
+        runs-on: ubuntu-latest
+        timeout-minutes: 30
+        permissions:
+            contents: read
+        env:
+            RUSTFLAGS: --cfg vulcan_nightly --deny warnings
+        steps:
+            - uses: actions/checkout@v4
+              with:
+                  persist-credentials: false
+            - uses: dtolnay/rust-toolchain@nightly
+              with:
+                  components: clippy
+            - uses: rui314/setup-mold@v1
+            - uses: Swatinem/rust-cache@v2
+              with:
+                  cache-on-failure: true
+            - uses: taiki-e/install-action@nextest
+            - run: cargo xtask clippy-nightly-cfg
+            - run: cargo nextest run --workspace --all-features
+            - run: cargo test --doc --workspace --all-features
+
+    commits:
+        name: commits
+        runs-on: ubuntu-latest
+        if: github.event_name == 'pull_request'
+        timeout-minutes: 10
+        permissions:
+            contents: read
+        steps:
+            - uses: actions/checkout@v4
+              with:
+                  persist-credentials: false
+                  # The whole history, so `origin/main..HEAD` lists the commits of the branch.
+                  fetch-depth: 0
+            - uses: dtolnay/rust-toolchain@stable
+            - uses: Swatinem/rust-cache@v2
+              with:
+                  cache-on-failure: true
+            # Every commit has a conventional title and a body: the history, not the pull
+            # request, carries the explanation.
+            - run: cargo xtask commits
+
+    lint-success:
+        name: lint success
+        runs-on: ubuntu-latest
+        if: always()
+        needs:
+            - clippy
+            - fmt
+            - docs
+            - style
+            - typos
+            - deny
+            - check-toml
+            - udeps
+            - features
+            - cargo-sort
+            - semver
+            - feature-propagation
+            - wasm
+            - no-test-deps
+            - miri
+            - fuzzing
+            - nightly-cfg
+            - commits
+        timeout-minutes: 5
+        steps:
+            - uses: re-actors/alls-green@release/v1
+              with:
+                  jobs: ${{ toJSON(needs) }}

@@ -1,42 +1,44 @@
-# Cross-compilation configuration for cross-rs
-# Documentation: https://github.com/cross-rs/cross/wiki/Configuration
+# Cross-compilation settings for `cross`, documented at
+# <https://github.com/cross-rs/cross/wiki/Configuration>.
 
 [build]
-# Install LLVM/Clang for all targets (needed for bindgen and similar tools)
-# Also enforces HTTPS for apt sources and adds retry/timeout configuration
+# Installs LLVM and Clang for every target, as `bindgen` and similar tools need them. Also
+# switches the apt sources to HTTPS and sets retries and timeouts.
 pre-build = [
-  "apt-get update && apt-get install --assume-yes --no-install-recommends ca-certificates",
-  "find /etc/apt/ -type f \\( -name '*.list' -o -name '*.sources' \\) -exec sed -i 's|http://|https://|g' {} +",
-  "echo 'Acquire::Retries \"3\";' > /etc/apt/apt.conf.d/80-retries",
-  "echo 'Acquire::http::Timeout \"60\";' >> /etc/apt/apt.conf.d/80-retries",
-  "echo 'Acquire::ftp::Timeout \"60\";' >> /etc/apt/apt.conf.d/80-retries",
-  "apt-get update && apt-get install --assume-yes --no-install-recommends llvm-dev libclang-dev clang",
+    "apt-get update && apt-get install --assume-yes --no-install-recommends ca-certificates",
+    """find /etc/apt/ -type f \\( -name '*.list' -o -name '*.sources' \\) \
+     -exec sed -i 's|http://|https://|g' {} +""",
+    "echo 'Acquire::Retries \"3\";' > /etc/apt/apt.conf.d/80-retries",
+    "echo 'Acquire::http::Timeout \"60\";' >> /etc/apt/apt.conf.d/80-retries",
+    "echo 'Acquire::ftp::Timeout \"60\";' >> /etc/apt/apt.conf.d/80-retries",
+    "apt-get update",
+    "apt-get install --assume-yes --no-install-recommends llvm-dev libclang-dev clang",
 ]
 
 [target.aarch64-unknown-linux-gnu]
-# jemalloc page size configuration for ARM64
+# The page size that jemalloc assumes on ARM64.
 env.passthrough = ["JEMALLOC_SYS_WITH_LG_PAGE"]
 
 [target.riscv64gc-unknown-linux-gnu]
-# Ubuntu 24.04 LTS base image with RISC-V cross-compiler
+# An Ubuntu 24.04 base image with the RISC-V cross-compiler.
 image = "ubuntu:24.04"
 pre-build = [
-  "apt update",
-  "apt install --yes gcc gcc-riscv64-linux-gnu g++-riscv64-linux-gnu libclang-dev make",
+    "apt update",
+    "apt install --yes gcc gcc-riscv64-linux-gnu g++-riscv64-linux-gnu libclang-dev make",
 ]
-# Linker and C++ compiler configuration for RISC-V
+# The linker and C++ compiler for RISC-V.
 env.passthrough = [
-  "CARGO_TARGET_RISCV64GC_UNKNOWN_LINUX_GNU_LINKER=riscv64-linux-gnu-gcc",
-  "CXX_riscv64gc_unknown_linux_gnu=riscv64-linux-gnu-g++",
+    "CARGO_TARGET_RISCV64GC_UNKNOWN_LINUX_GNU_LINKER=riscv64-linux-gnu-gcc",
+    "CXX_riscv64gc_unknown_linux_gnu=riscv64-linux-gnu-g++",
 ]
 
 [build.env]
-# Global environment variables passed through to all cross-compilation builds
+# Environment variables passed through to every cross-compilation build.
 passthrough = [
-  "RUSTFLAGS", # Compiler flags (critical for custom builds)
-  "RUST_BACKTRACE", # Debugging support
-  "JEMALLOC_SYS_WITH_LG_PAGE",
-  "SCCACHE_DIR",
-  "SCCACHE_ERROR_LOG",
-  "SCCACHE_LOG",
+    "RUSTFLAGS", # compiler flags, for custom builds
+    "RUST_BACKTRACE", # debugging support
+    "JEMALLOC_SYS_WITH_LG_PAGE",
+    "SCCACHE_DIR",
+    "SCCACHE_ERROR_LOG",
+    "SCCACHE_LOG",
 ]
