@@ -2,7 +2,11 @@
 
 Ultra-strict, performance-first Rust workspace template for systems where every microsecond and
 every allocation counts: financial infrastructure, high-frequency trading, blockchain, and
-compilers. Built for AI-assisted development.
+compilers. Its coding rules are a Rust adaptation of [TigerStyle], the style guide of the
+[TigerBeetle] financial transactions database. Built for AI-assisted development.
+
+[TigerStyle]: https://github.com/tigerbeetle/tigerbeetle/blob/main/docs/TIGER_STYLE.md
+[TigerBeetle]: https://github.com/tigerbeetle/tigerbeetle
 
 ## Who This Is For
 
@@ -30,6 +34,11 @@ pick a lighter template.
 Traditional Rust projects balance strictness with flexibility. Vulcan enforces a single correct
 pattern to prevent AI from generating inconsistent code, and ships the building blocks to make that
 code fast.
+
+The rules come from [TigerStyle], the style guide [TigerBeetle] wrote for a database where a wrong
+balance is not an option, itself built on NASA's
+[Power of Ten](https://spinroot.com/gerard/pdf/P10.pdf). Vulcan translates them to Rust and enforces
+each one with a lint or a check wherever a tool can.
 
 Key principles, in priority order: safety, then performance, then developer experience.
 
