@@ -26,9 +26,9 @@ use alloc::collections::{VecDeque, vec_deque};
 
 /// A vector that never grows past the capacity it was created with.
 #[derive(Debug, PartialEq, Eq)]
-pub struct BoundedVec<T> {
+pub struct BoundedVec<Value> {
     /// The items, in an allocation made for `capacity` items up front.
-    items: Vec<T>,
+    items: Vec<Value>,
     /// The maximum number of items, at least one.
     capacity: u32,
 }
@@ -37,7 +37,7 @@ pub struct BoundedVec<T> {
 #[cfg(target_pointer_width = "64")]
 crate::static_assert_size!(BoundedVec<u64>, 32);
 
-impl<T> BoundedVec<T> {
+impl<Value> BoundedVec<Value> {
     /// Creates an empty vector and allocates room for `capacity` items.
     ///
     /// # Panics
@@ -65,7 +65,7 @@ impl<T> BoundedVec<T> {
     /// Panics if an invariant is broken (the allocation moved or the count is off), which is a bug
     /// in this module.
     #[inline]
-    pub fn push(&mut self, item: T) -> Result<(), T> {
+    pub fn push(&mut self, item: Value) -> Result<(), Value> {
         let count_before = self.len();
         if count_before < self.capacity {
             let allocation_before = self.items.capacity();
@@ -86,7 +86,7 @@ impl<T> BoundedVec<T> {
     /// Panics if an invariant is broken (the allocation moved or the count is off), which is a bug
     /// in this module.
     #[inline]
-    pub fn pop(&mut self) -> Option<T> {
+    pub fn pop(&mut self) -> Option<Value> {
         let count_before = self.len();
         let allocation_before = self.items.capacity();
         let item = self.items.pop();
@@ -116,7 +116,7 @@ impl<T> BoundedVec<T> {
     /// Returns the items as a slice.
     #[inline]
     #[must_use = "the query has no side effect"]
-    pub fn as_slice(&self) -> &[T] {
+    pub fn as_slice(&self) -> &[Value] {
         self.assert_invariants();
         &self.items
     }
@@ -178,7 +178,7 @@ impl<T> BoundedVec<T> {
 
 /// Cloning allocates the full capacity, not only room for the current items, so the clone keeps
 /// accepting pushes up to the same capacity without reallocating.
-impl<T: Clone> Clone for BoundedVec<T> {
+impl<Value: Clone> Clone for BoundedVec<Value> {
     fn clone(&self) -> Self {
         let mut copy = Self::with_capacity(self.capacity);
         copy.items.extend_from_slice(&self.items);
@@ -191,9 +191,9 @@ impl<T: Clone> Clone for BoundedVec<T> {
 
 /// A first-in, first-out queue that never grows past the capacity it was created with.
 #[derive(Debug, PartialEq, Eq)]
-pub struct BoundedQueue<T> {
+pub struct BoundedQueue<Value> {
     /// The items, front first, in a ring buffer allocated for `capacity` items up front.
-    items: VecDeque<T>,
+    items: VecDeque<Value>,
     /// The maximum number of items, at least one.
     capacity: u32,
 }
@@ -202,7 +202,7 @@ pub struct BoundedQueue<T> {
 #[cfg(target_pointer_width = "64")]
 crate::static_assert_size!(BoundedQueue<u64>, 40);
 
-impl<T> BoundedQueue<T> {
+impl<Value> BoundedQueue<Value> {
     /// Creates an empty queue and allocates room for `capacity` items.
     ///
     /// # Panics
@@ -230,7 +230,7 @@ impl<T> BoundedQueue<T> {
     /// Panics if an invariant is broken (the allocation moved or the count is off), which is a bug
     /// in this module.
     #[inline]
-    pub fn push_back(&mut self, item: T) -> Result<(), T> {
+    pub fn push_back(&mut self, item: Value) -> Result<(), Value> {
         let count_before = self.len();
         if count_before < self.capacity {
             let allocation_before = self.items.capacity();
@@ -251,7 +251,7 @@ impl<T> BoundedQueue<T> {
     /// Panics if an invariant is broken (the allocation moved or the count is off), which is a bug
     /// in this module.
     #[inline]
-    pub fn pop_front(&mut self) -> Option<T> {
+    pub fn pop_front(&mut self) -> Option<Value> {
         let count_before = self.len();
         let allocation_before = self.items.capacity();
         let item = self.items.pop_front();
@@ -267,7 +267,7 @@ impl<T> BoundedQueue<T> {
     /// Returns the item at the front without removing it.
     #[inline]
     #[must_use = "the query has no side effect"]
-    pub fn front(&self) -> Option<&T> {
+    pub fn front(&self) -> Option<&Value> {
         self.assert_invariants();
         self.items.front()
     }
@@ -288,7 +288,7 @@ impl<T> BoundedQueue<T> {
 
     /// Iterates over the items, front to back.
     #[must_use = "iterators are lazy and do nothing unless consumed"]
-    pub fn iter(&self) -> vec_deque::Iter<'_, T> {
+    pub fn iter(&self) -> vec_deque::Iter<'_, Value> {
         self.assert_invariants();
         self.items.iter()
     }
@@ -350,7 +350,7 @@ impl<T> BoundedQueue<T> {
 
 /// Cloning allocates the full capacity, not only room for the current items, so the clone keeps
 /// accepting pushes up to the same capacity without reallocating.
-impl<T: Clone> Clone for BoundedQueue<T> {
+impl<Value: Clone> Clone for BoundedQueue<Value> {
     fn clone(&self) -> Self {
         let mut copy = Self::with_capacity(self.capacity);
         copy.items.extend(self.items.iter().cloned());
@@ -361,9 +361,9 @@ impl<T: Clone> Clone for BoundedQueue<T> {
     }
 }
 
-impl<'queue, T> IntoIterator for &'queue BoundedQueue<T> {
-    type Item = &'queue T;
-    type IntoIter = vec_deque::Iter<'queue, T>;
+impl<'queue, Value> IntoIterator for &'queue BoundedQueue<Value> {
+    type Item = &'queue Value;
+    type IntoIter = vec_deque::Iter<'queue, Value>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.iter()

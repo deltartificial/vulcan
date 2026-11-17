@@ -1,10 +1,15 @@
+//! Fuzz target: an `Interner` against a list of strings and a map of their positions.
+
 #![no_main]
 
+extern crate alloc;
+
+use alloc::collections::BTreeMap;
 use libfuzzer_sys::fuzz_target;
-use std::collections::HashMap;
 use vulcan::{
     arena::{Bump, BumpExtension as _},
     convert::{u32_from_usize, usize_from_u32},
+    division::Divide as _,
     intern::{Interner, Symbol},
 };
 
@@ -18,19 +23,19 @@ const WORD_SIZE_BYTES_MAX: u32 = 4;
 // only while the model holds fewer strings than the capacity.
 fuzz_target!(|data: &[u8]| {
     let Some((&capacity_byte, operations)) = data.split_first() else { return };
-    let capacity = u32::from(capacity_byte % 16) + 1;
+    let capacity = u32::from(capacity_byte.remainder(16)) + 1;
     let arena = Bump::with_fixed_capacity(capacity * WORD_SIZE_BYTES_MAX);
     let mut interner = Interner::with_capacity(&arena, capacity);
     let mut strings: Vec<String> = Vec::new();
-    let mut positions: HashMap<String, u32> = HashMap::new();
+    let mut positions: BTreeMap<String, u32> = BTreeMap::new();
 
-    for pair in operations.chunks_exact(2) {
+    for &[operation, argument] in operations.as_chunks::<2>().0 {
         // Words from a three-letter alphabet, up to four letters long, so they repeat often.
-        let argument = pair[1];
-        let word_size_bytes = usize::from(argument % 5);
-        let word: String =
-            (0..word_size_bytes).map(|i| char::from(b'a' + (argument >> i) % 3)).collect();
-        match pair[0] % 3 {
+        let word_size_bytes = u32::from(argument.remainder(5));
+        let word: String = (0..word_size_bytes)
+            .map(|shift| char::from(b'a' + (argument >> shift).remainder(3)))
+            .collect();
+        match operation.remainder(3) {
             0 => {
                 let known = positions.get(&word).copied();
                 let has_room = strings.len() < usize_from_u32(capacity);
@@ -54,7 +59,7 @@ fuzz_target!(|data: &[u8]| {
             }
             _ => {
                 if let Some(count) = u32::try_from(strings.len()).ok().filter(|&count| count > 0) {
-                    let position = u32::from(argument) % count;
+                    let position = u32::from(argument).remainder(count);
                     let resolved = interner.resolve(Symbol::from_u32(position));
                     assert_eq!(resolved, strings[usize_from_u32(position)], "resolve round-trips");
                 }

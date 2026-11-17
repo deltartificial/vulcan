@@ -6,17 +6,17 @@
 //! any hand-written scanner.
 //!
 //! ```
-//! use vulcan::bytes::{Cursor, is_id_continue, is_id_start, is_whitespace};
+//! use vulcan::bytes::{Cursor, is_identifier_continue, is_identifier_start, is_whitespace};
 //!
 //! let mut cursor = Cursor::new(b"owner /* skip me */ balance");
-//! let identifier = cursor.eat_while(is_id_continue);
+//! let identifier = cursor.eat_while(is_identifier_continue);
 //! assert_eq!(identifier, b"owner");
 //! let _whitespace = cursor.eat_while(is_whitespace);
 //! assert!(cursor.eat_prefix(b"/*"));
 //! assert!(cursor.skip_past(b"*/"));
 //! let _whitespace = cursor.eat_while(is_whitespace);
-//! assert!(cursor.first().is_some_and(is_id_start));
-//! assert_eq!(cursor.eat_while(is_id_continue), b"balance");
+//! assert!(cursor.first().is_some_and(is_identifier_start));
+//! assert_eq!(cursor.eat_while(is_identifier_continue), b"balance");
 //! assert!(cursor.is_eof());
 //! ```
 
@@ -31,9 +31,9 @@ use std::sync::OnceLock;
 /// Bit flag: ASCII whitespace (space, `\t`, `\n`, `\r`, form feed, vertical tab).
 pub const WHITESPACE: u8 = 1 << 0_u8;
 /// Bit flag: valid first byte of an identifier (`a-z`, `A-Z`, `_`, `$`).
-pub const ID_START: u8 = 1 << 1_u8;
-/// Bit flag: valid byte inside an identifier (`ID_START` plus `0-9`).
-pub const ID_CONTINUE: u8 = 1 << 2_u8;
+pub const IDENTIFIER_START: u8 = 1 << 1_u8;
+/// Bit flag: valid byte inside an identifier (`IDENTIFIER_START` plus `0-9`).
+pub const IDENTIFIER_CONTINUE: u8 = 1 << 2_u8;
 /// Bit flag: decimal digit.
 pub const DIGIT: u8 = 1 << 3_u8;
 /// Bit flag: hexadecimal digit.
@@ -41,7 +41,7 @@ pub const HEX_DIGIT: u8 = 1 << 4_u8;
 
 // Each class is its own bit, so classes combine with `|` and test with `&`.
 const _: () = assert!(
-    (WHITESPACE | ID_START | ID_CONTINUE | DIGIT | HEX_DIGIT).count_ones() == 5,
+    (WHITESPACE | IDENTIFIER_START | IDENTIFIER_CONTINUE | DIGIT | HEX_DIGIT).count_ones() == 5,
     "byte classes must be distinct bits"
 );
 
@@ -52,14 +52,14 @@ const _: () = assert!(byte_classes(b'\t') & WHITESPACE != 0, "a tab is whitespac
 const _: () = assert!(byte_classes(b'\r') & WHITESPACE != 0, "a carriage return is whitespace");
 const _: () = assert!(byte_classes(0x08) & WHITESPACE == 0, "a backspace is no whitespace");
 const _: () = assert!(byte_classes(0x0e) & WHITESPACE == 0, "shift out is no whitespace");
-const _: () = assert!(byte_classes(b'a') & ID_START != 0, "`a` starts an identifier");
-const _: () = assert!(byte_classes(b'z') & ID_START != 0, "`z` starts an identifier");
-const _: () = assert!(byte_classes(b'`') & ID_START == 0, "`` ` `` starts no identifier");
-const _: () = assert!(byte_classes(b'{') & ID_START == 0, "`{{` starts no identifier");
-const _: () = assert!(byte_classes(b'@') & ID_START == 0, "`@` starts no identifier");
-const _: () = assert!(byte_classes(b'[') & ID_START == 0, "`[` starts no identifier");
-const _: () = assert!(byte_classes(b'9') & ID_START == 0, "a digit starts no identifier");
-const _: () = assert!(byte_classes(b'9') & ID_CONTINUE != 0, "a digit continues one");
+const _: () = assert!(byte_classes(b'a') & IDENTIFIER_START != 0, "`a` starts an identifier");
+const _: () = assert!(byte_classes(b'z') & IDENTIFIER_START != 0, "`z` starts an identifier");
+const _: () = assert!(byte_classes(b'`') & IDENTIFIER_START == 0, "`` ` `` starts no identifier");
+const _: () = assert!(byte_classes(b'{') & IDENTIFIER_START == 0, "`{{` starts no identifier");
+const _: () = assert!(byte_classes(b'@') & IDENTIFIER_START == 0, "`@` starts no identifier");
+const _: () = assert!(byte_classes(b'[') & IDENTIFIER_START == 0, "`[` starts no identifier");
+const _: () = assert!(byte_classes(b'9') & IDENTIFIER_START == 0, "a digit starts no identifier");
+const _: () = assert!(byte_classes(b'9') & IDENTIFIER_CONTINUE != 0, "a digit continues one");
 const _: () = assert!(byte_classes(b'/') & DIGIT == 0, "`/` is no digit");
 const _: () = assert!(byte_classes(b':') & DIGIT == 0, "`:` is no digit");
 const _: () = assert!(byte_classes(b'F') & HEX_DIGIT != 0, "`F` is a hex digit");
@@ -87,15 +87,15 @@ pub fn is_whitespace(byte: u8) -> bool {
 /// Returns `true` if `byte` can start an identifier.
 #[inline]
 #[must_use = "a classification has no side effect"]
-pub fn is_id_start(byte: u8) -> bool {
-    classify(byte) & ID_START != 0
+pub fn is_identifier_start(byte: u8) -> bool {
+    classify(byte) & IDENTIFIER_START != 0
 }
 
 /// Returns `true` if `byte` can continue an identifier.
 #[inline]
 #[must_use = "a classification has no side effect"]
-pub fn is_id_continue(byte: u8) -> bool {
-    classify(byte) & ID_CONTINUE != 0
+pub fn is_identifier_continue(byte: u8) -> bool {
+    classify(byte) & IDENTIFIER_CONTINUE != 0
 }
 
 /// Returns `true` if `byte` is a hexadecimal digit.
@@ -396,23 +396,23 @@ const fn byte_classes(byte: u8) -> u8 {
         classes |= WHITESPACE;
     }
     if matches!(byte, b'a'..=b'z' | b'A'..=b'Z' | b'_' | b'$') {
-        classes |= ID_START | ID_CONTINUE;
+        classes |= IDENTIFIER_START | IDENTIFIER_CONTINUE;
     }
     if byte.is_ascii_digit() {
-        classes |= ID_CONTINUE | DIGIT;
+        classes |= IDENTIFIER_CONTINUE | DIGIT;
     }
     if byte.is_ascii_hexdigit() {
         classes |= HEX_DIGIT;
     }
     // Implications between classes, checked for every byte while the table is built.
-    if classes & ID_START != 0 {
-        assert!(classes & ID_CONTINUE != 0, "an identifier start also continues one");
+    if classes & IDENTIFIER_START != 0 {
+        assert!(classes & IDENTIFIER_CONTINUE != 0, "an identifier start also continues one");
     }
     if classes & DIGIT != 0 {
         assert!(classes & HEX_DIGIT != 0, "a decimal digit is a hex digit");
     }
     if classes & WHITESPACE != 0 {
-        assert!(classes & ID_CONTINUE == 0, "whitespace is in no identifier");
+        assert!(classes & IDENTIFIER_CONTINUE == 0, "whitespace is in no identifier");
     }
     classes
 }
@@ -442,7 +442,8 @@ const fn build_table() -> [u8; 256] {
     ];
     let flat = rows.as_flattened();
     assert!(flat.len() == 256, "16 rows of 16 entries cover every byte value");
-    // Unreachable after the length assertion above; a `const fn` cannot format a message.
+    // Unreachable after the length assertion above. No message: a `const fn` cannot call the
+    // formatting code behind `unreachable!("..")`, which the compiler rejects (E0015).
     let Some(table) = flat.first_chunk::<256>() else { unreachable!() };
     assert!(table[0xff] == byte_classes(u8::MAX), "the last entry is the last byte value");
     *table
@@ -481,12 +482,13 @@ mod tests {
     #[test]
     fn table_matches_reference_predicates() {
         for byte in 0..=u8::MAX {
-            let whitespace = byte.is_ascii_whitespace() || byte == 0x0b;
+            let whitespace = if byte.is_ascii_whitespace() { true } else { byte == 0x0b };
             assert_eq!(is_whitespace(byte), whitespace, "byte {byte}");
-            let id_start = byte.is_ascii_alphabetic() || byte == b'_' || byte == b'$';
-            assert_eq!(is_id_start(byte), id_start, "byte {byte}");
-            let id_continue = id_start || byte.is_ascii_digit();
-            assert_eq!(is_id_continue(byte), id_continue, "byte {byte}");
+            let identifier_start =
+                if byte.is_ascii_alphabetic() { true } else { matches!(byte, b'_' | b'$') };
+            assert_eq!(is_identifier_start(byte), identifier_start, "byte {byte}");
+            let identifier_continue = if identifier_start { true } else { byte.is_ascii_digit() };
+            assert_eq!(is_identifier_continue(byte), identifier_continue, "byte {byte}");
             assert_eq!(is_hex_digit(byte), byte.is_ascii_hexdigit(), "byte {byte}");
             assert_eq!(classify(byte) & DIGIT != 0, byte.is_ascii_digit(), "byte {byte}");
         }

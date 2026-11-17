@@ -54,6 +54,8 @@ pub(crate) struct Function<'text> {
     pub(crate) visibility: Visibility,
     /// Where the function is declared.
     pub(crate) container: Container,
+    /// The type or trait whose block declares the function, or nothing at module level.
+    pub(crate) owner: &'text str,
     /// Whether the declaration has a body, unlike a trait method signature.
     pub(crate) has_body: bool,
 }
@@ -78,15 +80,17 @@ pub(crate) enum Container {
     Trait,
 }
 
-/// An `impl` or `trait` block: its line range and kind.
+/// An `impl` or `trait` block: its line range, its kind and the type or trait it belongs to.
 #[derive(Debug, Clone, Copy)]
-struct Block {
+struct Block<'text> {
     /// The line of the `impl` or `trait` keyword.
     line_index_first: usize,
     /// The line of the closing brace.
     line_index_last: usize,
     /// [`Container::Inherent`] or [`Container::Trait`].
     container: Container,
+    /// The name of the type the block implements, or of the trait it defines.
+    owner: &'text str,
 }
 
 impl<'text> Source<'text> {
@@ -123,7 +127,7 @@ impl<'text> Source<'text> {
     pub(crate) fn function_around(&self, line_index: usize) -> Option<&Function<'text>> {
         assert!(line_index < self.lines.len(), "the line is in the file");
         let found = self.functions.iter().rev().find(|function| {
-            function.line_index_first <= line_index && line_index <= function.line_index_last
+            (function.line_index_first..=function.line_index_last).contains(&line_index)
         });
         if let Some(function) = found {
             assert!(function.line_index_first <= line_index, "the function starts at or before");
@@ -148,15 +152,19 @@ pub(crate) fn code_part(line: &str) -> &str {
     let mut in_string = false;
     let mut previous = ' ';
     for (offset, character) in line.char_indices() {
-        let quote = character == '"' && previous != '\\';
-        let comment = character == '/' && previous == '/' && !in_string;
-        if quote {
-            in_string = !in_string;
-        }
-        if comment {
-            let code = line.get(..offset - 1).map_or(line, |code| code);
-            assert!(code.len() < line.len(), "the comment is cut off");
-            return code;
+        match (previous, character) {
+            ('\\', _) => {}
+            (_, '"') => in_string = !in_string,
+            ('/', '/') => {
+                if in_string {
+                    // Two slashes inside a string literal are text.
+                } else {
+                    let code = line.get(..offset - 1).map_or(line, |code| code);
+                    assert!(code.len() < line.len(), "the comment is cut off");
+                    return code;
+                }
+            }
+            _ => {}
         }
         previous = character;
     }
@@ -171,16 +179,18 @@ pub(crate) fn strip_literals(code: &str) -> String {
     let mut in_string = false;
     let mut escaped = false;
     for character in code.chars() {
-        if in_string {
-            let closes = character == '"' && !escaped;
-            escaped = character == '\\' && !escaped;
-            if closes {
+        match (in_string, escaped, character) {
+            (true, true, _) => escaped = false,
+            (true, false, '"') => {
                 in_string = false;
                 stripped.push(character);
             }
-        } else {
-            in_string = character == '"';
-            stripped.push(character);
+            (true, false, '\\') => escaped = true,
+            (true, false, _) => {}
+            (false, _, _) => {
+                in_string = character == '"';
+                stripped.push(character);
+            }
         }
     }
     assert!(stripped.len() <= code.len(), "stripping only removes characters");
@@ -200,7 +210,7 @@ pub(crate) fn declares_function(line: &str) -> bool {
 
 /// Returns `true` if `character` can be part of an identifier.
 pub(crate) const fn is_identifier_character(character: char) -> bool {
-    let identifier = character.is_ascii_alphanumeric() || character == '_';
+    let identifier = matches!(character, 'a'..='z' | 'A'..='Z' | '0'..='9' | '_');
     if identifier {
         assert!(character.is_ascii(), "identifiers of this workspace are ASCII");
     }
@@ -213,10 +223,12 @@ fn source_new_closing(lines: &[&str], line_index_first: usize) -> Option<usize> 
     let closing_width = indentation(lines[line_index_first]);
     let found = (line_index_first..lines.len()).find(|&line_index| {
         let line = lines[line_index];
-        line.trim_end().ends_with('}') && indentation(line) == closing_width && {
-            let trimmed = line.trim();
-            trimmed == "}" || trimmed == "};" || line_index == line_index_first
-        }
+        let closes =
+            if line.trim_end().ends_with('}') { indentation(line) == closing_width } else { false };
+        // A one-line block closes on the line that opens it; any other closes on a line of its own.
+        let alone =
+            if line_index == line_index_first { true } else { matches!(line.trim(), "}" | "};") };
+        if closes { alone } else { false }
     });
     if let Some(line_index_last) = found {
         assert!(line_index_last >= line_index_first, "a block closes after it opens");
@@ -225,19 +237,27 @@ fn source_new_closing(lines: &[&str], line_index_first: usize) -> Option<usize> 
 }
 
 /// Returns the `impl` and `trait` blocks of `lines`.
-fn source_new_blocks(lines: &[&str]) -> Vec<Block> {
+fn source_new_blocks<'text>(lines: &[&'text str]) -> Vec<Block<'text>> {
     let mut blocks = Vec::new();
     for (line_index, line) in lines.iter().enumerate() {
         let declaration = line.trim_start();
         let opens_block = BLOCK_PREFIXES.iter().any(|prefix| declaration.starts_with(prefix));
         // A header with a `where` clause opens its brace on a later line, at the same indentation.
         let declared_only = declaration.trim_end().ends_with(';');
-        let opens = opens_block && !declared_only;
+        let opens = if opens_block { !declared_only } else { false };
         if opens {
-            let is_trait = declaration.contains(" for ") || declaration.contains("trait ");
-            let container = if is_trait { Container::Trait } else { Container::Inherent };
+            let container = match (declaration.contains(" for "), declaration.contains("trait ")) {
+                (false, false) => Container::Inherent,
+                (true, _) | (false, true) => Container::Trait,
+            };
+            let owner = source_new_blocks_owner(declaration);
             if let Some(line_index_last) = source_new_closing(lines, line_index) {
-                blocks.push(Block { line_index_first: line_index, line_index_last, container });
+                blocks.push(Block {
+                    line_index_first: line_index,
+                    line_index_last,
+                    container,
+                    owner,
+                });
             }
         }
     }
@@ -247,8 +267,53 @@ fn source_new_blocks(lines: &[&str]) -> Vec<Block> {
     blocks
 }
 
+/// Returns the name of the type or trait of the block header `declaration`: `Thing` for
+/// `impl<T> Trait for Thing<T>`, for `impl Thing` and for `trait Thing`.
+fn source_new_blocks_owner(declaration: &str) -> &str {
+    assert!(!declaration.contains('\n'), "one line at a time");
+    let subject = match declaration.split_once(" for ") {
+        Some((_, implementer)) => implementer,
+        None => source_new_blocks_owner_subject(declaration),
+    };
+    let path = subject.trim_start_matches(['&', '$', ' ']);
+    // A path ends at the first character that is neither an identifier nor a `::` separator;
+    // the colon of a supertrait bound (`trait Thing: Other`) is trimmed off.
+    let path_length = path
+        .find(|character: char| !matches!(character, 'a'..='z' | 'A'..='Z' | '0'..='9' | '_' | ':'))
+        .map_or(path.len(), |length| length);
+    let qualified = path.get(..path_length).map_or("", |qualified| qualified).trim_end_matches(':');
+    let name = qualified.rsplit("::").next().map_or("", |name| name);
+    assert!(name.chars().all(is_identifier_character), "an owner is one identifier");
+    name
+}
+
+/// Returns the text after the keyword and the generic parameters of a block header without
+/// `for`: ` Thing<T> {` for `impl<T> Thing<T> {`.
+fn source_new_blocks_owner_subject(declaration: &str) -> &str {
+    let after_keyword = BLOCK_PREFIXES
+        .iter()
+        .find_map(|prefix| declaration.strip_prefix(prefix))
+        .map_or("", |after| after);
+    assert!(after_keyword.len() <= declaration.len(), "the keyword is cut off");
+    let mut depth = 0_u32;
+    let mut previous = ' ';
+    for (offset, character) in after_keyword.char_indices() {
+        match character {
+            '<' => depth += 1,
+            '>' if previous != '-' => depth = depth.saturating_sub(1),
+            _ if depth == 0 => return after_keyword.get(offset..).map_or("", |subject| subject),
+            _ => {}
+        }
+        previous = character;
+    }
+    ""
+}
+
 /// Returns the functions of `lines`, each with the container that `blocks` gives it.
-fn source_new_functions<'text>(lines: &[&'text str], blocks: &[Block]) -> Vec<Function<'text>> {
+fn source_new_functions<'text>(
+    lines: &[&'text str],
+    blocks: &[Block<'text>],
+) -> Vec<Function<'text>> {
     let mut functions = Vec::new();
     for (line_index, line) in lines.iter().enumerate() {
         let function = declares_function(line)
@@ -265,7 +330,7 @@ fn source_new_functions<'text>(lines: &[&'text str], blocks: &[Block]) -> Vec<Fu
 fn source_new_functions_one<'text>(
     lines: &[&'text str],
     line_index_first: usize,
-    blocks: &[Block],
+    blocks: &[Block<'text>],
 ) -> Option<Function<'text>> {
     assert!(declares_function(lines[line_index_first]), "a function starts here");
     let declaration = lines[line_index_first].trim_start();
@@ -273,7 +338,7 @@ fn source_new_functions_one<'text>(
     // The signature may span several lines (parameters, `where` clauses) before its `{`.
     let line_index_opening = (line_index_first..lines.len()).find(|&line_index| {
         let code = code_part(lines[line_index]).trim_end();
-        code.ends_with('{') || code.ends_with(';') || code.ends_with('}')
+        code.ends_with(['{', ';', '}'])
     })?;
     let opening = code_part(lines[line_index_opening]).trim_end();
     let signature_lines = &lines[line_index_first..=line_index_opening];
@@ -292,13 +357,15 @@ fn source_new_functions_one<'text>(
     };
     let visibility =
         if declaration.starts_with("pub") { Visibility::Public } else { Visibility::Private };
-    let container = blocks
-        .iter()
-        .rev()
-        .find(|block| {
-            block.line_index_first < line_index_first && line_index_last <= block.line_index_last
-        })
-        .map_or(Container::Module, |block| block.container);
+    let block = blocks.iter().rev().find(|block| {
+        if block.line_index_first < line_index_first {
+            line_index_last <= block.line_index_last
+        } else {
+            false
+        }
+    });
+    let container = block.map_or(Container::Module, |found| found.container);
+    let owner = block.map_or("", |found| found.owner);
     assert!(line_index_first <= line_index_last, "a function ends where it starts or later");
     Some(Function {
         name,
@@ -308,6 +375,7 @@ fn source_new_functions_one<'text>(
         body,
         visibility,
         container,
+        owner,
         has_body,
     })
 }
@@ -345,6 +413,8 @@ mod tests {
         assert_eq!(source.functions[1].body, ["    value"]);
         assert_eq!(source.functions[2].container, Container::Inherent);
         assert_eq!(source.functions[3].container, Container::Trait);
+        let owners: Vec<&str> = source.functions.iter().map(|function| function.owner).collect();
+        assert_eq!(owners, ["", "", "Thing", "Thing"]);
         assert_eq!(source.code().len(), 22);
     }
 

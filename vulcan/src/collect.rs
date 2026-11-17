@@ -1,22 +1,24 @@
-//! Collecting into a slice without a heap allocation in the common cases.
+//! Collecting a few items into a slice without a heap allocation.
 //!
-//! Many call sites gather a few items only to pass them as `&[T]` (hash a type list, look up an
+//! Many call sites gather a few items only to pass them as a slice (hash a type list, look up an
 //! interned tuple). Measured in Solar, lists of 0, 1 or 2 items cover about 95% of such calls.
-//! [`CollectAndApply::collect_and_apply`] builds those on the stack, and anything longer in a
-//! [`SmallVec`] with [`INLINE_ITEM_COUNT`] inline slots, so the heap is touched only beyond that.
+//! The method [`CollectAndApply::collect_and_apply`] builds those on the stack, and anything
+//! longer in the inline slots of a [`SmallVec`]. Their number, [`INLINE_ITEM_COUNT`], is a hard
+//! limit: a longer iterator is a programmer error, so the heap is never touched. Gather a longer
+//! list into a buffer allocated at startup and pass it as a slice instead.
 //!
 //! ```
 //! use vulcan::collect::CollectAndApply as _;
 //!
 //! let sum = [3_u32, 4].into_iter().collect_and_apply(|items| items.iter().sum::<u32>());
 //! assert_eq!(sum, 7);
-//! let item_count = (0..20).collect_and_apply(<[i32]>::len);
-//! assert_eq!(item_count, 20);
+//! let item_count = (0..8).collect_and_apply(<[i32]>::len);
+//! assert_eq!(item_count, 8);
 //! ```
 
 use smallvec::{SmallVec, smallvec};
 
-/// The number of items gathered without a heap allocation.
+/// The number of items gathered at most, all of them without a heap allocation.
 ///
 /// A `usize` because it is the length of the inline array of the [`SmallVec`].
 pub const INLINE_ITEM_COUNT: usize = 8;
@@ -26,12 +28,13 @@ const _: () = assert!(INLINE_ITEM_COUNT >= 3, "the first three items fit inline"
 
 /// Extension for iterators: gather the items and call a function on them as a slice.
 pub trait CollectAndApply: Iterator + Sized {
-    /// Calls `apply` with the items of the iterator, allocating only beyond the inline items
-    /// ([`INLINE_ITEM_COUNT`]).
+    /// Calls `apply` with the items of the iterator, at most [`INLINE_ITEM_COUNT`] of them, without
+    /// allocating.
     ///
     /// # Panics
     ///
-    /// Panics if the iterator yields fewer or more items than its `size_hint` promised.
+    /// Panics if the iterator yields more than [`INLINE_ITEM_COUNT`] items, or fewer or more items
+    /// than its `size_hint` promised.
     #[inline]
     #[track_caller]
     fn collect_and_apply<Output, Apply>(mut self, apply: Apply) -> Output
@@ -55,12 +58,17 @@ pub trait CollectAndApply: Iterator + Sized {
             return apply(&[first, second]);
         };
         let mut items: SmallVec<[Self::Item; INLINE_ITEM_COUNT]> = smallvec![first, second, third];
-        items.extend(self);
+        // Bounded: the inline slots left after the first three items.
+        for item in self.by_ref().take(INLINE_ITEM_COUNT - 3) {
+            items.push(item);
+        }
+        assert!(self.next().is_none(), "an iterator yields at most `INLINE_ITEM_COUNT` items");
         assert!(items.len() >= item_count_min, "the iterator yields its lower bound");
         if let Some(count_max) = item_count_max {
             assert!(items.len() <= count_max, "the iterator stays within its upper bound");
         }
-        assert_eq!(items.spilled(), items.len() > INLINE_ITEM_COUNT, "the heap only beyond inline");
+        assert!(items.len() <= INLINE_ITEM_COUNT, "the items fit in the inline slots");
+        assert!(!items.spilled(), "the heap is never touched");
         apply(&items)
     }
 }
@@ -93,26 +101,31 @@ mod tests {
         }
     }
 
-    /// Collects every length from 0 to 19: the stack cases (0 to 2), the inline cases (3 to 8)
-    /// and the spill to the heap all hand the items over in order.
+    /// Collects every length from 0 to 8: the stack cases (0 to 2) and the inline cases (3 to 8)
+    /// all hand the items over in order.
     #[test]
     fn every_length_reaches_the_callback() {
-        for item_count in 0..20_u32 {
+        for item_count in 0..=8_u32 {
             let seen = (0..item_count).collect_and_apply(<[u32]>::to_vec);
             assert_eq!(seen, (0..item_count).collect::<Vec<_>>());
         }
     }
 
-    /// Collects the empty input and the boundary of the inline capacity, 8 and 9 items, with an
-    /// iterator without an exact size hint, so the `SmallVec` cannot reserve up front.
+    /// Collects the empty input and the largest input, 8 items, with an iterator without an
+    /// exact size hint: both ends of the valid range keep every item.
     #[test]
     fn the_inline_boundary_and_the_empty_input_keep_every_item() {
         let empty = iter::empty::<u8>().collect_and_apply(<[u8]>::len);
         assert_eq!(empty, 0, "the empty input gives the empty slice");
-        for item_count in [8_u8, 9_u8] {
-            let items = (0..item_count).filter(|_| true).collect_and_apply(<[u8]>::to_vec);
-            assert_eq!(items, (0..item_count).collect::<Vec<_>>());
-        }
+        let items = (0..8_u8).filter(|_| true).collect_and_apply(<[u8]>::to_vec);
+        assert_eq!(items, (0..8_u8).collect::<Vec<_>>(), "the last count that fits");
+    }
+
+    /// Collects 9 items, one above the limit, which must crash rather than reach the heap.
+    #[test]
+    #[should_panic(expected = "an iterator yields at most `INLINE_ITEM_COUNT` items")]
+    fn an_iterator_above_the_inline_count_panics() {
+        let _item_count = (0..9_u8).filter(|_| true).collect_and_apply(<[u8]>::len);
     }
 
     /// Collects an iterator whose size hint promises more items than it yields, a broken

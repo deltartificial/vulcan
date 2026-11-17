@@ -23,12 +23,7 @@
 //! ```
 
 use crate::convert::{u32_from_usize, usize_from_u32};
-use core::{
-    fmt,
-    marker::PhantomData,
-    ops::{Index, IndexMut},
-    slice,
-};
+use core::{fmt, marker::PhantomData, ops, slice};
 
 /// A typed index into an [`IndexVec`].
 pub trait TypedIndex: Copy + Eq + Ord + fmt::Debug + 'static {
@@ -126,7 +121,7 @@ macro_rules! newtype_index {
         }
 
         impl $crate::cache::CacheKey for $name {
-            type Cache<V: Copy> = $crate::cache::DenseCache<Self, V>;
+            type Cache<Value: Copy> = $crate::cache::DenseCache<Self, Value>;
         }
 
         // The niche is the reason the type exists, so its loss fails the build.
@@ -167,25 +162,25 @@ macro_rules! newtype_index {
     )*};
 }
 
-/// Ties a container to its index type without owning an `I`, so the container stays `Send`,
-/// `Sync` and covariant whatever `I` is.
-type IndexMarker<I> = PhantomData<fn() -> I>;
+/// Ties a container to its index type without owning an `Index`, so the container stays `Send`,
+/// `Sync` and covariant whatever `Index` is.
+type IndexMarker<Index> = PhantomData<fn() -> Index>;
 
-/// A `Vec<T>` indexed by `I` instead of `usize`, with a capacity fixed at construction.
+/// A `Vec<Value>` indexed by `Index` instead of `usize`, with a capacity fixed at construction.
 ///
 /// The whole capacity is allocated up front and a push never reallocates: pushing past the
 /// capacity is a broken limit, which is a programmer error, and it panics.
 #[derive(PartialEq, Eq)]
-pub struct IndexVec<I, T> {
+pub struct IndexVec<Index, Value> {
     /// The elements, allocated with room for `capacity` of them.
-    raw: Vec<T>,
+    raw: Vec<Value>,
     /// The number of elements the vector may hold, which it never exceeds.
     capacity: u32,
     /// The index type.
-    _index: IndexMarker<I>,
+    _index: IndexMarker<Index>,
 }
 
-impl<I: TypedIndex, T> IndexVec<I, T> {
+impl<Index: TypedIndex, Value> IndexVec<Index, Value> {
     /// Creates an empty vector and allocates room for `capacity` elements.
     ///
     /// # Panics
@@ -198,7 +193,7 @@ impl<I: TypedIndex, T> IndexVec<I, T> {
         assert!(raw.capacity() >= usize_from_u32(capacity), "the allocation covers the capacity");
         assert!(raw.is_empty(), "a new vector is empty");
         if let Some(last) = capacity.checked_sub(1) {
-            let last_index = I::from_usize(usize_from_u32(last));
+            let last_index = Index::from_usize(usize_from_u32(last));
             assert_eq!(
                 last_index.index(),
                 usize_from_u32(last),
@@ -215,10 +210,10 @@ impl<I: TypedIndex, T> IndexVec<I, T> {
     /// Panics if the vector already holds `capacity` elements.
     #[inline]
     #[track_caller]
-    pub fn push(&mut self, value: T) -> I {
+    pub fn push(&mut self, value: Value) -> Index {
         let count = self.len();
         assert!(count < self.capacity, "the index vector is full");
-        let index = I::from_usize(usize_from_u32(count));
+        let index = Index::from_usize(usize_from_u32(count));
         assert!(index.index() < usize_from_u32(self.capacity), "a new index lies in the capacity");
         let allocation_before = self.raw.capacity();
         self.raw.push(value);
@@ -236,10 +231,10 @@ impl<I: TypedIndex, T> IndexVec<I, T> {
     #[inline]
     #[must_use = "the index is the only result"]
     #[track_caller]
-    pub fn next_index(&self) -> I {
+    pub fn next_index(&self) -> Index {
         let count = self.len();
         assert!(count <= self.capacity, "the next index is at most the capacity");
-        let index = I::from_usize(usize_from_u32(count));
+        let index = Index::from_usize(usize_from_u32(count));
         assert_eq!(index.index(), usize_from_u32(count), "the next index is the element count");
         index
     }
@@ -270,9 +265,14 @@ impl<I: TypedIndex, T> IndexVec<I, T> {
     }
 
     /// Returns `true` if the vector has no elements.
+    ///
+    /// # Panics
+    ///
+    /// Panics only if the vector grew past its capacity, which is a bug in this module.
     #[inline]
     #[must_use = "the answer is the only result"]
     pub const fn is_empty(&self) -> bool {
+        assert!(self.raw.len() <= usize_from_u32(self.capacity), "the length stays bounded");
         self.raw.is_empty()
     }
 
@@ -284,7 +284,7 @@ impl<I: TypedIndex, T> IndexVec<I, T> {
     #[inline]
     #[must_use = "the element is the only result"]
     #[track_caller]
-    pub fn get(&self, index: I) -> Option<&T> {
+    pub fn get(&self, index: Index) -> Option<&Value> {
         assert!(
             index.index() < usize_from_u32(self.capacity),
             "index beyond the capacity of the vector"
@@ -300,7 +300,7 @@ impl<I: TypedIndex, T> IndexVec<I, T> {
     #[inline]
     #[must_use = "the element is the only result"]
     #[track_caller]
-    pub fn get_mut(&mut self, index: I) -> Option<&mut T> {
+    pub fn get_mut(&mut self, index: Index) -> Option<&mut Value> {
         assert!(
             index.index() < usize_from_u32(self.capacity),
             "index beyond the capacity of the vector"
@@ -315,7 +315,7 @@ impl<I: TypedIndex, T> IndexVec<I, T> {
     /// Panics only if an invariant of the vector is broken, which is a bug in this module.
     #[inline]
     #[must_use = "the slice is the only result"]
-    pub fn as_raw_slice(&self) -> &[T] {
+    pub fn as_raw_slice(&self) -> &[Value] {
         let elements = self.raw.as_slice();
         assert!(elements.len() <= usize_from_u32(self.capacity), "the length stays bounded");
         elements
@@ -327,7 +327,7 @@ impl<I: TypedIndex, T> IndexVec<I, T> {
     ///
     /// Panics only if an invariant of the vector is broken, which is a bug in this module.
     #[inline]
-    pub fn iter(&self) -> slice::Iter<'_, T> {
+    pub fn iter(&self) -> slice::Iter<'_, Value> {
         self.as_raw_slice().iter()
     }
 
@@ -338,32 +338,26 @@ impl<I: TypedIndex, T> IndexVec<I, T> {
     /// Panics only if an invariant of the vector is broken, which is a bug in this module.
     #[inline]
     #[must_use = "iterators are lazy and do nothing unless consumed"]
-    pub fn iter_enumerated(&self) -> impl ExactSizeIterator<Item = (I, &T)> {
-        let count = self.raw.len();
-        self.as_raw_slice().iter().enumerate().map(move |(position, element)| {
-            assert!(position < count, "an enumerated index lies in the vector");
-            let index = I::from_usize(position);
-            (index, element)
-        })
+    pub fn iter_enumerated(&self) -> impl ExactSizeIterator<Item = (Index, &Value)> {
+        self.as_raw_slice()
+            .iter()
+            .enumerate()
+            .map(|(position, element)| (Index::from_usize(position), element))
     }
 
-    /// Iterates over all valid indices.
+    /// Returns every valid index, in order.
     ///
     /// # Panics
     ///
     /// Panics only if an invariant of the vector is broken, which is a bug in this module.
     #[inline]
     #[must_use = "iterators are lazy and do nothing unless consumed"]
-    pub fn indices(&self) -> impl ExactSizeIterator<Item = I> + use<I, T> {
-        let count = self.raw.len();
-        (0..count).map(move |position| {
-            assert!(position < count, "a valid index lies in the vector");
-            I::from_usize(position)
-        })
+    pub fn indices(&self) -> impl ExactSizeIterator<Item = Index> + use<Index, Value> {
+        (0..self.as_raw_slice().len()).map(Index::from_usize)
     }
 }
 
-impl<I: TypedIndex, T: Clone> Clone for IndexVec<I, T> {
+impl<Index: TypedIndex, Value: Clone> Clone for IndexVec<Index, Value> {
     /// Copies the elements into a new allocation of the same capacity, which a derived clone
     /// would shrink to the length.
     fn clone(&self) -> Self {
@@ -376,19 +370,19 @@ impl<I: TypedIndex, T: Clone> Clone for IndexVec<I, T> {
     }
 }
 
-impl<I: TypedIndex, T: fmt::Debug> fmt::Debug for IndexVec<I, T> {
+impl<Index: TypedIndex, Value: fmt::Debug> fmt::Debug for IndexVec<Index, Value> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         assert!(self.len() <= self.capacity, "the length stays within the capacity");
         formatter.debug_map().entries(self.iter_enumerated()).finish()
     }
 }
 
-impl<I: TypedIndex, T> Index<I> for IndexVec<I, T> {
-    type Output = T;
+impl<Index: TypedIndex, Value> ops::Index<Index> for IndexVec<Index, Value> {
+    type Output = Value;
 
     #[inline]
     #[track_caller]
-    fn index(&self, index: I) -> &T {
+    fn index(&self, index: Index) -> &Value {
         let position = index.index();
         // Checked apart from the length, so an index from a larger vector is told from one that
         // this vector has not reached yet.
@@ -401,10 +395,10 @@ impl<I: TypedIndex, T> Index<I> for IndexVec<I, T> {
     }
 }
 
-impl<I: TypedIndex, T> IndexMut<I> for IndexVec<I, T> {
+impl<Index: TypedIndex, Value> ops::IndexMut<Index> for IndexVec<Index, Value> {
     #[inline]
     #[track_caller]
-    fn index_mut(&mut self, index: I) -> &mut T {
+    fn index_mut(&mut self, index: Index) -> &mut Value {
         let position = index.index();
         assert!(
             position < usize_from_u32(self.capacity),
@@ -415,9 +409,9 @@ impl<I: TypedIndex, T> IndexMut<I> for IndexVec<I, T> {
     }
 }
 
-impl<'vector, I: TypedIndex, T> IntoIterator for &'vector IndexVec<I, T> {
-    type Item = &'vector T;
-    type IntoIter = slice::Iter<'vector, T>;
+impl<'vector, Index: TypedIndex, Value> IntoIterator for &'vector IndexVec<Index, Value> {
+    type Item = &'vector Value;
+    type IntoIter = slice::Iter<'vector, Value>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.iter()

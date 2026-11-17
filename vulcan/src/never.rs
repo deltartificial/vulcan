@@ -1,6 +1,6 @@
 //! The never type on stable, and helpers to unwrap infallible results.
 //!
-//! A `Result<T, Never>` or `ControlFlow<Never, T>` cannot hold its failure variant, so the
+//! A `Result<Value, Never>` or `ControlFlow<Never, Value>` cannot hold its failure variant, so the
 //! compiler removes that path entirely: an infallible visitor or fold written against a generic
 //! `BreakValue` pays nothing for the early-exit plumbing it does not use.
 //!
@@ -66,7 +66,7 @@ impl<Value> UnwrapInfallible for ControlFlow<Never, Value> {
     }
 }
 
-/// Extension for `Result<T, Never>`, named like the unstable `Result::into_ok`.
+/// Extension for `Result<Value, Never>`, named like the unstable `Result::into_ok`.
 pub trait IntoOk<Value> {
     /// Returns the `Ok` value. Never panics: the `Err` variant cannot exist.
     fn into_ok(self) -> Value;

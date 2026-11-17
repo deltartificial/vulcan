@@ -1,8 +1,11 @@
+//! Fuzz target: an `IndexVec` against a `Vec` model.
+
 #![no_main]
 
 use libfuzzer_sys::fuzz_target;
 use vulcan::{
     convert::{u32_from_usize, usize_from_u32},
+    division::Divide as _,
     index::IndexVec,
 };
 
@@ -32,12 +35,11 @@ fuzz_target!(|data: &[u8]| {
     let mut model: Vec<u8> = Vec::with_capacity(usize_from_u32(capacity));
     assert_eq!(vector.capacity(), capacity, "the vector keeps its capacity");
 
-    for pair in operations.chunks_exact(2) {
-        let operand = pair[1];
-        let probe = u32::from(operand) % capacity;
+    for &[operation, operand] in operations.as_chunks::<2>().0 {
+        let probe = u32::from(operand).remainder(capacity);
         let index = Item::from_u32(probe);
         let slot = usize_from_u32(probe);
-        match pair[0] % 4 {
+        match operation.remainder(4) {
             0 => {
                 if vector.len() < capacity {
                     let pushed = vector.push(operand);

@@ -111,17 +111,17 @@ macro_rules! allocator_assert {
 /// side of the `GlobalAlloc` contract (a non-zero size, a non-null pointer) and the backend's (an
 /// aligned result): a few compares next to the cost of an allocation.
 #[derive(Debug)]
-pub struct StaticAllocator<A> {
+pub struct StaticAllocator<Backend> {
     /// The backend that serves the allocations.
-    inner: A,
+    inner: Backend,
     /// Whether initialization is over, after which every allocation aborts.
     sealed: AtomicBool,
 }
 
-impl<A> StaticAllocator<A> {
+impl<Backend> StaticAllocator<Backend> {
     /// Wraps `inner`, open for allocation.
     #[must_use = "an allocator does nothing until it is installed"]
-    pub const fn new(inner: A) -> Self {
+    pub const fn new(inner: Backend) -> Self {
         Self { inner, sealed: AtomicBool::new(false) }
     }
 
@@ -135,7 +135,6 @@ impl<A> StaticAllocator<A> {
         // may complete one more allocation, which is still part of initialization.
         let sealed_before = self.sealed.swap(true, Ordering::Relaxed);
         assert!(!sealed_before, "initialization ends once");
-        assert!(self.is_sealed(), "the allocator is sealed");
     }
 
     /// Returns `true` once [`seal`](Self::seal) has been called.
@@ -166,7 +165,7 @@ fn allocator_assert_abort(message: &'static str) -> ! {
 // SAFETY: every method forwards to `inner`, a `GlobalAlloc`, with the caller's arguments
 // unchanged, so `inner`'s guarantees carry over. The added checks only read the arguments and the
 // results, and abort the process when one fails: they never unwind.
-unsafe impl<A: GlobalAlloc> GlobalAlloc for StaticAllocator<A> {
+unsafe impl<Backend: GlobalAlloc> GlobalAlloc for StaticAllocator<Backend> {
     #[inline]
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
         allocator_assert!(!self.is_sealed(), "no allocation after the seal");

@@ -10,7 +10,13 @@ mod rules;
 mod source;
 mod style;
 
-use crate::{report::Violation, rules::Density, source::Source, style::Syntax};
+use crate::{
+    commits::Commit,
+    report::Violation,
+    rules::Density,
+    source::Source,
+    style::{Syntax, TextFile},
+};
 use std::{
     env, fs,
     io::{self, Write as _},
@@ -63,10 +69,10 @@ enum Action {
     /// Checks the commit messages of the branch with [`commits`].
     Commits,
     /// Copies the compatibility test vectors between the checkout and a temporary directory.
-    Copy(Copy),
+    CopyVectors(Direction),
 }
 
-/// Which way [`Action::Copy`] goes.
+/// Which way [`Action::CopyVectors`] goes.
 #[derive(Clone, Copy)]
 enum Direction {
     /// From the checkout to the temporary directory.
@@ -75,11 +81,13 @@ enum Direction {
     Restore,
 }
 
-/// The settings of [`Action::Copy`].
+/// The two ends of a copy of a directory tree.
 #[derive(Clone, Copy)]
-struct Copy {
-    /// Which way the files go.
-    direction: Direction,
+struct CopyPaths<'path> {
+    /// The directory read.
+    source: &'path Path,
+    /// The directory written, created if it does not exist.
+    target: &'path Path,
 }
 
 /// A named entry point.
@@ -213,6 +221,25 @@ const TASKS: &[Task] = &[
         ),
     },
     Task {
+        name: "clippy-fuzz",
+        summary: "Run clippy on the fuzz targets, warnings denied.",
+        action: run(
+            "cargo",
+            &[
+                "+nightly",
+                "clippy",
+                "--manifest-path",
+                "fuzz/Cargo.toml",
+                "--all-targets",
+                "--no-deps",
+                "--",
+                "--deny",
+                "warnings",
+            ],
+            &[],
+        ),
+    },
+    Task {
         name: "clippy-fix",
         summary: "Apply clippy's automatic fixes.",
         action: run(
@@ -261,7 +288,7 @@ const TASKS: &[Task] = &[
     Task {
         name: "lint",
         summary: "Format, then run clippy, typos, dprint and the style checks.",
-        action: Action::Sequence(&["fmt", "clippy", "typos", "toml", "style"]),
+        action: Action::Sequence(&["fmt", "clippy", "clippy-fuzz", "typos", "toml", "style"]),
     },
     Task {
         name: "udeps",
@@ -365,12 +392,12 @@ const TASKS: &[Task] = &[
     Task {
         name: "compat-save",
         summary: "Save `test-vectors` outside the checkout, before switching branches.",
-        action: Action::Copy(Copy { direction: Direction::Save }),
+        action: Action::CopyVectors(Direction::Save),
     },
     Task {
         name: "compat-restore",
         summary: "Restore the saved `test-vectors` into the checkout.",
-        action: Action::Copy(Copy { direction: Direction::Restore }),
+        action: Action::CopyVectors(Direction::Restore),
     },
     Task {
         name: "bench",
@@ -384,6 +411,7 @@ const TASKS: &[Task] = &[
             "deny",
             "fmt",
             "clippy",
+            "clippy-fuzz",
             "typos",
             "toml-check",
             "style",
@@ -430,7 +458,7 @@ const COMMIT_COUNT_MAX: usize = 1024;
 /// The directory of the compatibility test vectors in the checkout.
 const VECTORS_DIRECTORY: &str = "test-vectors";
 
-/// The upper bound on the files and directories that [`Action::Copy`] visits.
+/// The upper bound on the files and directories that [`Action::CopyVectors`] visits.
 const COPY_ENTRY_COUNT_MAX: usize = 100_000;
 
 /// The directories whose code counts towards the assertion density.
@@ -463,7 +491,7 @@ fn main_run_task(name: &str) -> Result<(), Failure> {
         Action::NoTestDependencies |
         Action::Fuzz |
         Action::Commits |
-        Action::Copy(_) => main_run_task_leaf(task),
+        Action::CopyVectors(_) => main_run_task_leaf(task),
     }
 }
 
@@ -476,7 +504,7 @@ fn main_run_task_leaf(task: &Task) -> Result<(), Failure> {
         Action::NoTestDependencies => main_run_task_leaf_test_dependencies(),
         Action::Fuzz => main_run_task_leaf_fuzz(),
         Action::Commits => main_run_task_leaf_commits(),
-        Action::Copy(copy) => main_run_task_leaf_copy(*copy),
+        Action::CopyVectors(direction) => main_run_task_leaf_copy(*direction),
         Action::Sequence(_) => unreachable!("sequence `{}` used as a step", task.name),
     }
 }
@@ -542,13 +570,18 @@ struct FileReport {
 /// Checks one file, and counts its density if it is in [`DENSITY_DIRECTORIES`].
 fn main_run_task_leaf_style_file(path: &str, syntax: Syntax) -> Result<FileReport, Failure> {
     let text = fs::read_to_string(path)?;
-    let mut violations = style::check_text(path, &text, syntax);
+    let mut violations = style::check_text(&TextFile { path, text: &text }, syntax);
     let density = match syntax {
         Syntax::Rust => {
             let source = Source::new(&text);
             violations.extend(rules::check_rules(path, &source));
             let counted = DENSITY_DIRECTORIES.iter().any(|directory| path.starts_with(directory));
-            if counted { rules::count_density(&source) } else { Density::ZERO }
+            if counted {
+                violations.extend(rules::check_blind_functions(path, &source));
+                rules::count_density(&source)
+            } else {
+                Density::ZERO
+            }
         }
         Syntax::Hash | Syntax::Plain => Density::ZERO,
     };
@@ -651,28 +684,27 @@ fn main_run_task_leaf_commits() -> Result<(), Failure> {
     let listing = run_output("git", &["rev-list", "--no-merges", &range])?;
     let hashes: Vec<&str> = listing.lines().collect();
     assert!(hashes.len() <= COMMIT_COUNT_MAX, "the branch fits the bound");
-    let full = hashes.iter().all(|hash| hash.len() == 40 || hash.len() == 64);
+    let full = hashes.iter().all(|hash| matches!(hash.len(), 40 | 64));
     assert!(full, "`rev-list` prints full hashes");
     let mut violations = Vec::new();
     for hash in hashes {
         let message = run_output("git", &["log", "--max-count=1", "--format=%B", hash])?;
-        violations.extend(commits::check_message(hash, &message));
+        violations.extend(commits::check_message(&Commit { name: hash, message: &message }));
     }
     main_run_task_leaf_style_report(&violations, Density::ZERO)
 }
 
 /// Copies [`VECTORS_DIRECTORY`] to or from the temporary directory, if it exists.
-fn main_run_task_leaf_copy(copy: Copy) -> Result<(), Failure> {
+fn main_run_task_leaf_copy(direction: Direction) -> Result<(), Failure> {
     let saved = env::temp_dir().join("vulcan-compat-vectors");
     let checkout = PathBuf::from(VECTORS_DIRECTORY);
-    let (source, target) = match copy.direction {
+    let (source, target) = match direction {
         Direction::Save => (checkout, saved),
         Direction::Restore => (saved, checkout),
     };
     assert!(source != target, "a copy goes somewhere else");
     if source.is_dir() {
-        main_run_task_leaf_copy_tree(&source, &target)?;
-        assert!(target.is_dir(), "the copy created its target");
+        main_run_task_leaf_copy_tree(&CopyPaths { source: &source, target: &target })?;
     } else {
         writeln!(io::stderr(), "nothing to copy: `{}` does not exist", source.display())?;
     }
@@ -681,10 +713,13 @@ fn main_run_task_leaf_copy(copy: Copy) -> Result<(), Failure> {
 
 /// Copies the directory tree at `source` to `target`, with an explicit stack instead of
 /// recursion, visiting at most [`COPY_ENTRY_COUNT_MAX`] entries.
-fn main_run_task_leaf_copy_tree(source: &Path, target: &Path) -> Result<(), Failure> {
-    assert!(source.is_dir(), "the source is a directory");
-    assert!(source != target, "a tree is not copied onto itself");
-    let mut pending = vec![(source.to_path_buf(), target.to_path_buf())];
+///
+/// Whether the source is a directory is not asserted: the file system is outside the program, so
+/// a source that is missing or not a directory is an operating error, which `read_dir` returns.
+fn main_run_task_leaf_copy_tree(paths: &CopyPaths<'_>) -> Result<(), Failure> {
+    assert!(!paths.source.as_os_str().is_empty(), "the source has a path");
+    assert!(paths.source != paths.target, "a tree is not copied onto itself");
+    let mut pending = vec![(paths.source.to_path_buf(), paths.target.to_path_buf())];
     for _ in 0..COPY_ENTRY_COUNT_MAX {
         let Some((source_directory, target_directory)) = pending.pop() else {
             return Ok(());
@@ -797,9 +832,43 @@ mod tests {
         fs::create_dir_all(source.join("nested")).unwrap();
         fs::write(source.join("top.bin"), b"top").unwrap();
         fs::write(source.join("nested").join("deep.bin"), b"deep").unwrap();
-        main_run_task_leaf_copy_tree(&source, &target).unwrap();
+        main_run_task_leaf_copy_tree(&CopyPaths { source: &source, target: &target }).unwrap();
         assert_eq!(fs::read(target.join("nested").join("deep.bin")).unwrap(), b"deep");
         assert_eq!(fs::read(target.join("top.bin")).unwrap(), b"top");
         fs::remove_dir_all(root).unwrap();
+    }
+
+    /// Returns the lines of the `[lints.*]` tables of a manifest, comments and blank lines
+    /// aside.
+    fn lint_tables(manifest: &str) -> Vec<&str> {
+        let mut inside = false;
+        let mut lines = Vec::new();
+        let content = manifest
+            .lines()
+            .filter(|line| !line.trim().is_empty())
+            .filter(|line| !line.starts_with('#'));
+        for line in content {
+            if line.starts_with('[') {
+                inside = line.starts_with("[lints.");
+            }
+            if inside {
+                lines.push(line);
+            }
+        }
+        lines
+    }
+
+    /// Compares the lint tables of the fuzz package with those of the workspace, line by line:
+    /// the fuzz package is outside the workspace and cannot inherit them, so it copies them.
+    #[test]
+    #[cfg_attr(miri, ignore = "Miri isolates the test from the file system")]
+    fn fuzz_lints_match_the_workspace_lints() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
+        let workspace = fs::read_to_string(root.join("Cargo.toml")).unwrap();
+        let fuzz = fs::read_to_string(root.join("fuzz").join("Cargo.toml")).unwrap();
+        let inherited = workspace.replace("[workspace.lints.", "[lints.");
+        let expected = lint_tables(&inherited);
+        assert!(expected.len() > 50, "the workspace sets its lints");
+        assert_eq!(lint_tables(&fuzz), expected, "copy the workspace lints to `fuzz/Cargo.toml`");
     }
 }

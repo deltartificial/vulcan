@@ -39,6 +39,8 @@ jobs:
               with:
                   cache-on-failure: true
             - run: cargo xtask clippy
+            # The fuzz targets are a package of their own, outside the workspace.
+            - run: cargo xtask clippy-fuzz
 
     fmt:
         name: fmt

@@ -41,17 +41,20 @@ The full rules are in [docs/CODING.md](docs/CODING.md). In short:
 
 - Safety first, performance second, developer experience third
 - Assert arguments, return values and invariants: at least two assertions per function on average,
-  one condition per assertion, each with a message; `debug_assert!` is banned
+  at least one in every function of several statements, one condition per assertion, each with a
+  message; `debug_assert!` is banned
 - Put a limit on everything: no recursion, no `while`/`loop`, fixed-capacity collections
-- Allocate at start-up; collections take their capacity when created and never grow past it
+- Allocate at start-up; collections take their capacity when created and never grow past it; a
+  reused buffer is zeroed or sliced to its filled part before it leaves the program
 - `u32` for indices, counts and capacities; `usize` only at the slice boundary, via
   `vulcan::convert`, never `as`
 - Functions of 70 lines at most; branch in the parent, loop in the leaves; leaf functions pure
-- One condition per `if` (nest or name compound ones); no `if !`; `else if` chains end with `else`
-- Pass options explicitly: no `Default`, never `Default::default`; at most one argument per
-  primitive type and no positional `Option` (use a struct); enums instead of `bool` arguments
-- No abbreviations; units and qualifiers last (`len_min`, `stack_size_bytes`); a helper called by
-  one function is named after it (`parse` → `parse_digits`)
+- No `&&` and no `||`: nest `if`s or match on the cases; no `if !`; `else if` chains end with `else`
+- Pass options explicitly: no `Default`, never `Default::default`; at most one argument per type and
+  no positional `Option` (use a struct); enums instead of `bool` arguments
+- No abbreviations, type parameters included (`Item`, not `T`); units and qualifiers last
+  (`len_min`, `stack_size_bytes`); a helper called by one function is named after it (`parse` calls
+  `parse_digits`)
 - Every test opens with a doc comment that says what it checks and how
 - Division states its rounding: `divide_exact`, `divide_floor`, `div_ceil`
 - Comments are sentences that explain **why**; 100 columns at most in every file
@@ -69,8 +72,9 @@ every hot path, in short:
   `#[cold]` function
 - Keep `Result` small: box large errors, return `diagnostic::ErrorGuaranteed` once reported
 - Reuse buffers (`clear`, `mem::swap`) instead of allocating per iteration
-- Go parallel only through `vulcan::sync` helpers (size thresholds, ordered results), and emit
-  diagnostics from parallel code only through `DiagnosticContext::par_map` / `DiagnosticBatch`
+- Go parallel only through a `vulcan::sync::WorkerPool` created at start-up (size threshold, ordered
+  results, no allocation per batch), and emit diagnostics from parallel code only through a
+  `DiagnosticBatch` returned with the output and committed in order
 - Pin the size of hot types with `static_assert_size!`
 - No `String`/`Vec`/`Rc`/`Arc`/`Box<dyn>` in hot nodes: use `Symbol`, arena slices, `ArenaBox`
 - No `SeqCst`; justify every atomic `Ordering` in a comment

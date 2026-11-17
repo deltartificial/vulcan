@@ -45,23 +45,23 @@ const _: () = assert!(WORD_BITS.is_power_of_two(), "`WORD_BITS` must be a power 
 const _: () = assert!(WORDS_INLINE * WORD_BITS_USIZE == 128, "128 indices fit inline");
 
 /// Ties a set to its index type without storing an index.
-type IndexMarker<I> = PhantomData<fn() -> I>;
+type IndexMarker<Index> = PhantomData<fn() -> Index>;
 
 /// A set of indices in `0..domain_count`, one bit each.
 ///
 /// Invariant: the bits of the last word beyond `domain_count` are always zero, so counting and
 /// comparing sets never sees indices outside the domain.
 #[derive(Clone, PartialEq, Eq, Hash)]
-pub struct DenseBitSet<I> {
+pub struct DenseBitSet<Index> {
     /// The number of indices the set can hold: its indices are `0..domain_count`.
     domain_count: u32,
     /// One bit per index of the domain, lowest index in the lowest bit of the first word.
     words: SmallVec<[Word; WORDS_INLINE]>,
     /// The index type.
-    _index: IndexMarker<I>,
+    _index: IndexMarker<Index>,
 }
 
-impl<I: TypedIndex> DenseBitSet<I> {
+impl<Index: TypedIndex> DenseBitSet<Index> {
     /// Creates an empty set for indices in `0..domain_count`.
     ///
     /// # Panics
@@ -112,7 +112,7 @@ impl<I: TypedIndex> DenseBitSet<I> {
     /// Panics if `index` is outside the domain.
     #[inline]
     #[track_caller]
-    pub fn insert(&mut self, index: I) -> bool {
+    pub fn insert(&mut self, index: Index) -> bool {
         let (word_index, mask) = self.locate(index);
         let before = self.words[word_index];
         self.words[word_index] = before | mask;
@@ -128,7 +128,7 @@ impl<I: TypedIndex> DenseBitSet<I> {
     /// Panics if `index` is outside the domain.
     #[inline]
     #[track_caller]
-    pub fn remove(&mut self, index: I) -> bool {
+    pub fn remove(&mut self, index: Index) -> bool {
         let (word_index, mask) = self.locate(index);
         let before = self.words[word_index];
         self.words[word_index] = before & !mask;
@@ -145,8 +145,9 @@ impl<I: TypedIndex> DenseBitSet<I> {
     #[inline]
     #[must_use = "the answer is the only result"]
     #[track_caller]
-    pub fn contains(&self, index: I) -> bool {
+    pub fn contains(&self, index: Index) -> bool {
         let (word_index, mask) = self.locate(index);
+        assert!(word_index < self.words.len(), "an index of the domain has its word");
         self.words[word_index] & mask != 0
     }
 
@@ -179,9 +180,7 @@ impl<I: TypedIndex> DenseBitSet<I> {
     ///
     /// Panics only if an invariant of the set is broken, which is a bug in this module.
     pub fn clear(&mut self) {
-        let word_count = self.words.len();
         self.words.fill(0);
-        assert_eq!(self.words.len(), word_count, "clearing keeps every word");
         self.assert_invariants();
         assert!(self.is_empty(), "a cleared set is empty");
     }
@@ -202,7 +201,7 @@ impl<I: TypedIndex> DenseBitSet<I> {
         assert_eq!(self.count(), self.domain_count, "every index of the domain is present");
         // The last index sits next to the cleared excess bits, where an off-by-one would show.
         if let Some(last) = self.domain_count.checked_sub(1) {
-            let last_index = I::from_usize(usize_from_u32(last));
+            let last_index = Index::from_usize(usize_from_u32(last));
             assert!(self.contains(last_index), "the last index of the domain is present");
         }
     }
@@ -251,7 +250,7 @@ impl<I: TypedIndex> DenseBitSet<I> {
     /// # Panics
     ///
     /// Panics only if an invariant of the set is broken, which is a bug in this module.
-    pub fn iter(&self) -> impl Iterator<Item = I> + '_ {
+    pub fn iter(&self) -> impl Iterator<Item = Index> + '_ {
         self.assert_invariants();
         let domain_count = self.domain_count;
         (0_u32..).zip(self.words.iter()).flat_map(move |(word_index, &word)| {
@@ -259,7 +258,7 @@ impl<I: TypedIndex> DenseBitSet<I> {
             BitIndices(word).map(move |bit| {
                 let value = base + bit;
                 assert!(value < domain_count, "a present index lies in the domain");
-                I::from_usize(usize_from_u32(value))
+                Index::from_usize(usize_from_u32(value))
             })
         })
     }
@@ -267,7 +266,7 @@ impl<I: TypedIndex> DenseBitSet<I> {
     /// Returns the word holding `index` and the mask of its bit.
     #[inline]
     #[track_caller]
-    fn locate(&self, index: I) -> (usize, Word) {
+    fn locate(&self, index: Index) -> (usize, Word) {
         let bit_index = u32_from_usize(index.index());
         assert!(
             bit_index < self.domain_count,
@@ -376,7 +375,7 @@ impl Iterator for BitIndices {
     }
 }
 
-impl<I: TypedIndex> fmt::Debug for DenseBitSet<I> {
+impl<Index: TypedIndex> fmt::Debug for DenseBitSet<Index> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.assert_invariants();
         assert!(self.count() <= self.domain_count, "no bit is set outside the domain");

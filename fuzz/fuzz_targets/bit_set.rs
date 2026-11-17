@@ -1,7 +1,10 @@
+//! Fuzz target: a `DenseBitSet` against a `Vec<bool>` model.
+
 #![no_main]
 
+use core::mem;
 use libfuzzer_sys::fuzz_target;
-use vulcan::{bit_set::DenseBitSet, convert::usize_from_u32};
+use vulcan::{bit_set::DenseBitSet, convert::usize_from_u32, division::Divide as _};
 
 vulcan::newtype_index! {
     /// The index type of the fuzzed sets.
@@ -19,9 +22,9 @@ fn assert_same(set: &DenseBitSet<Node>, model: &[bool]) {
 }
 
 /// Applies `operation` to every bit of `model` with the matching bit of `other_model`.
-fn combine_model<F>(model: &mut [bool], other_model: &[bool], operation: F)
+fn combine_model<Operation>(model: &mut [bool], other_model: &[bool], operation: Operation)
 where
-    F: Fn(bool, bool) -> bool,
+    Operation: Fn(bool, bool) -> bool,
 {
     assert_eq!(model.len(), other_model.len(), "models over one domain");
     for (bit, &other_bit) in model.iter_mut().zip(other_model) {
@@ -42,14 +45,20 @@ fuzz_target!(|data: &[u8]| {
     let mut other_model = vec![false; usize_from_u32(domain_count)];
     assert_eq!(set.domain_count(), domain_count, "the set keeps its domain");
 
-    for pair in operations.chunks_exact(2) {
-        let index = u32::from(pair[1]) % domain_count;
+    for &[operation, operand] in operations.as_chunks::<2>().0 {
+        let index = u32::from(operand).remainder(domain_count);
         let node = Node::from_u32(index);
         let slot = usize_from_u32(index);
-        match pair[0] % 10 {
-            0 => assert_eq!(set.insert(node), !std::mem::replace(&mut model[slot], true)),
-            1 => assert_eq!(set.remove(node), std::mem::replace(&mut model[slot], false)),
-            2 => assert_eq!(set.contains(node), model[slot]),
+        match operation.remainder(10) {
+            0 => {
+                let absent = !mem::replace(&mut model[slot], true);
+                assert_eq!(set.insert(node), absent, "an insert reports a new index");
+            }
+            1 => {
+                let present = mem::replace(&mut model[slot], false);
+                assert_eq!(set.remove(node), present, "a removal reports a held index");
+            }
+            2 => assert_eq!(set.contains(node), model[slot], "a lookup matches the model"),
             3 => {
                 let _inserted = other.insert(node);
                 other_model[slot] = true;
@@ -57,19 +66,31 @@ fuzz_target!(|data: &[u8]| {
             4 => {
                 let changed = set.union(&other);
                 let before = model.clone();
-                combine_model(&mut model, &other_model, |bit, other_bit| bit | other_bit);
+                combine_model(
+                    &mut model,
+                    &other_model,
+                    |bit, other_bit| if bit { true } else { other_bit },
+                );
                 assert_eq!(changed, before != model, "a union reports a change");
             }
             5 => {
                 let changed = set.intersect(&other);
                 let before = model.clone();
-                combine_model(&mut model, &other_model, |bit, other_bit| bit & other_bit);
+                combine_model(
+                    &mut model,
+                    &other_model,
+                    |bit, other_bit| if bit { other_bit } else { false },
+                );
                 assert_eq!(changed, before != model, "an intersection reports a change");
             }
             6 => {
                 let changed = set.subtract(&other);
                 let before = model.clone();
-                combine_model(&mut model, &other_model, |bit, other_bit| bit & !other_bit);
+                combine_model(
+                    &mut model,
+                    &other_model,
+                    |bit, other_bit| if bit { !other_bit } else { false },
+                );
                 assert_eq!(changed, before != model, "a difference reports a change");
             }
             7 => {

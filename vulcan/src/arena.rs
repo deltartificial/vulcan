@@ -44,19 +44,19 @@ pub trait BumpExtension {
     ///
     /// Panics if the arena has a fixed capacity and too little room is left for the items.
     #[expect(clippy::mut_from_ref, reason = "arena allocation hands out disjoint borrows")]
-    fn allocate_exact<T, Items>(&self, items: Items) -> &mut [T]
+    fn allocate_exact<Value, Items>(&self, items: Items) -> &mut [Value]
     where
-        Items: IntoIterator<Item = T>,
+        Items: IntoIterator<Item = Value>,
         Items::IntoIter: ExactSizeIterator;
 
-    /// Allocates a single value as a one-element slice, for APIs that take `&[T]` when a node
+    /// Allocates a single value as a one-element slice, for APIs that take `&[Value]` when a node
     /// usually has one child.
     ///
     /// # Panics
     ///
     /// Panics if the arena has a fixed capacity and too little room is left for the value.
     #[expect(clippy::mut_from_ref, reason = "arena allocation hands out disjoint borrows")]
-    fn allocate_one<T>(&self, value: T) -> &mut [T];
+    fn allocate_one<Value>(&self, value: Value) -> &mut [Value];
 }
 
 impl BumpExtension for Bump {
@@ -71,16 +71,16 @@ impl BumpExtension for Bump {
     }
 
     #[inline]
-    fn allocate_exact<T, Items>(&self, items: Items) -> &mut [T]
+    fn allocate_exact<Value, Items>(&self, items: Items) -> &mut [Value]
     where
-        Items: IntoIterator<Item = T>,
+        Items: IntoIterator<Item = Value>,
         Items::IntoIter: ExactSizeIterator,
     {
-        const { assert!(!mem::needs_drop::<T>(), "arena values must not need `Drop`") };
+        const { assert!(!mem::needs_drop::<Value>(), "arena values must not need `Drop`") };
         let items_exact = items.into_iter();
         let item_count = items_exact.len();
         if self.allocation_limit().is_some() {
-            let size_bytes = size_of::<T>() * item_count;
+            let size_bytes = size_of::<Value>() * item_count;
             assert!(size_bytes <= self.chunk_capacity(), "the arena has room for the items");
         }
         let slice = self.alloc_slice_fill_iter(items_exact);
@@ -89,7 +89,7 @@ impl BumpExtension for Bump {
     }
 
     #[inline]
-    fn allocate_one<T>(&self, value: T) -> &mut [T] {
+    fn allocate_one<Value>(&self, value: Value) -> &mut [Value] {
         let slice = self.allocate_exact(iter::once(value));
         assert_eq!(slice.len(), 1, "one value, one element");
         assert!(slice.as_ptr().is_aligned(), "the arena aligns the value");
@@ -99,11 +99,11 @@ impl BumpExtension for Bump {
 
 /// The "box" of arena-allocated trees: a unique reference into the arena.
 ///
-/// One word with a non-null niche, so `Option<ArenaBox<'arena, T>>` is still one word. Creating
+/// One word with a non-null niche, so `Option<ArenaBox<'arena, Value>>` is still one word. Creating
 /// it is a pointer bump and dropping it does nothing; the arena frees every node at once. Use it
-/// for child links in ASTs and IRs where a heap `Box<T>` would cost a `malloc` and a `free` per
+/// for child links in ASTs and IRs where a heap `Box<Value>` would cost a `malloc` and a `free` per
 /// node.
-pub type ArenaBox<'arena, T> = &'arena mut T;
+pub type ArenaBox<'arena, Value> = &'arena mut Value;
 
 /// The capacity of a [`ThreadArenas`]: how many threads may allocate, and how much each may.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -149,7 +149,10 @@ pub struct ThreadArenas {
 }
 
 impl ThreadArenas {
-    /// Creates an empty set of arenas. Each thread's arena is created and allocated on first use.
+    /// Creates an empty set of arenas. Each thread's arena is created and allocated on its first
+    /// call of [`local`](Self::local): a program that seals its allocator makes every thread call
+    /// it during initialization, from the start handler of its pool
+    /// ([`WorkerPool`](crate::sync::WorkerPool)).
     ///
     /// # Panics
     ///
@@ -253,14 +256,14 @@ pub struct Mark(u32);
 /// assert_eq!(stack.finish(outer, &arena), &[1, 2]);
 /// ```
 #[derive(Debug)]
-pub struct SliceStack<T> {
+pub struct SliceStack<Value> {
     /// The items of every unfinished level, outermost first.
-    items: Vec<T>,
+    items: Vec<Value>,
     /// The number of items the stack may hold across all levels.
     capacity: u32,
 }
 
-impl<T> SliceStack<T> {
+impl<Value> SliceStack<Value> {
     /// Creates an empty stack and allocates room for `capacity` items across all levels.
     ///
     /// # Panics
@@ -292,7 +295,7 @@ impl<T> SliceStack<T> {
     /// Panics if the stack already holds `capacity` items.
     #[inline]
     #[track_caller]
-    pub fn push(&mut self, item: T) {
+    pub fn push(&mut self, item: Value) {
         assert!(self.items.len() < usize_from_u32(self.capacity), "the slice stack is full");
         let allocation_before = self.items.capacity();
         self.items.push(item);
@@ -306,7 +309,7 @@ impl<T> SliceStack<T> {
     /// Panics if `mark` lies above the top of the stack: a level above it was finished first.
     #[must_use = "reading the items has no side effect"]
     #[track_caller]
-    pub fn since(&self, mark: Mark) -> &[T] {
+    pub fn since(&self, mark: Mark) -> &[Value] {
         self.assert_mark(mark);
         let items = &self.items[usize_from_u32(mark.0)..];
         assert!(items.len() <= usize_from_u32(self.capacity), "a level fits in the capacity");
@@ -319,7 +322,7 @@ impl<T> SliceStack<T> {
     ///
     /// Panics if `mark` lies above the top of the stack: levels must finish innermost first.
     #[track_caller]
-    pub fn finish<'arena>(&mut self, mark: Mark, arena: &'arena Bump) -> &'arena mut [T] {
+    pub fn finish<'arena>(&mut self, mark: Mark, arena: &'arena Bump) -> &'arena mut [Value] {
         self.assert_mark(mark);
         let start = usize_from_u32(mark.0);
         let item_count = self.items.len() - start;

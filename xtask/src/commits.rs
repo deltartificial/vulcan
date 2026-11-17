@@ -17,9 +17,19 @@ pub(crate) const TITLE_LENGTH_MAX: u32 = 72;
 /// The shortest body, in characters: enough for a sentence that says why.
 pub(crate) const BODY_LENGTH_MIN: u32 = 20;
 
-/// Returns the violations of one commit message; `commit` names the commit in the report.
-pub(crate) fn check_message(commit: &str, message: &str) -> Vec<Violation> {
-    assert!(!commit.is_empty(), "a commit has a name");
+/// One commit, as `git` reports it.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct Commit<'text> {
+    /// What names the commit in the report: its hash.
+    pub(crate) name: &'text str,
+    /// The whole message: the title, a blank line and the body.
+    pub(crate) message: &'text str,
+}
+
+/// Returns the violations of the message of one commit.
+pub(crate) fn check_message(commit: &Commit<'_>) -> Vec<Violation> {
+    let Commit { name, message } = *commit;
+    assert!(!name.is_empty(), "a commit has a name");
     let mut problems = Vec::new();
     let mut lines = message.lines();
     let title = lines.next().map_or("", str::trim_end);
@@ -40,7 +50,7 @@ pub(crate) fn check_message(commit: &str, message: &str) -> Vec<Violation> {
         problems.push("separate the title from the body with a blank line".to_owned());
     }
     assert!(problems.len() <= 3, "a title, a separator and a body problem at most");
-    problems.into_iter().map(|problem| Violation::new(commit, 0, problem)).collect()
+    problems.into_iter().map(|problem| Violation::new(name, 0, problem)).collect()
 }
 
 /// Returns what is wrong with a title, if anything.
@@ -63,7 +73,9 @@ fn check_message_title(title: &str) -> Option<String> {
     } else {
         Some(format!("start the title with one of: {}", TYPES.join(", ")))
     };
-    assert!(problem.is_some() || title_length > 0, "a valid title is not empty");
+    if problem.is_none() {
+        assert!(title_length > 0, "a valid title is not empty");
+    }
     problem
 }
 
@@ -71,21 +83,26 @@ fn check_message_title(title: &str) -> Option<String> {
 mod tests {
     use super::*;
 
+    /// Returns the violations of `message`, as the message of a commit called `abc`.
+    fn check(message: &str) -> Vec<Violation> {
+        check_message(&Commit { name: "abc", message })
+    }
+
     /// Accepts a conventional title with a body, with and without a scope and a breaking mark.
     #[test]
     fn conventional_messages_with_a_body_pass() {
         let body = "\n\nExplains what changed and why it had to.";
         for title in ["feat(sync): add a pool", "fix: handle empty input", "feat!: remove an API"] {
-            assert!(check_message("abc", &format!("{title}{body}")).is_empty(), "{title}");
+            assert!(check(&format!("{title}{body}")).is_empty(), "{title}");
         }
     }
 
     /// Flags an unknown type, a missing body, a missing blank line and an unclosed scope.
     #[test]
     fn broken_messages_are_reported() {
-        assert_eq!(check_message("abc", "update stuff\n\nA body that is long enough.").len(), 1);
-        assert_eq!(check_message("abc", "fix: handle empty input").len(), 1);
-        assert_eq!(check_message("abc", "fix: a\nNo blank line before this body.").len(), 1);
-        assert_eq!(check_message("abc", "fix(sync: a\n\nA body that is long enough.").len(), 1);
+        assert_eq!(check("update stuff\n\nA body that is long enough.").len(), 1);
+        assert_eq!(check("fix: handle empty input").len(), 1);
+        assert_eq!(check("fix: a\nNo blank line before this body.").len(), 1);
+        assert_eq!(check("fix(sync: a\n\nA body that is long enough.").len(), 1);
     }
 }

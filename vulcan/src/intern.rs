@@ -8,8 +8,8 @@
 //! - [`Symbol`] and [`Interner`]: string interning with `u32` handles.
 //! - [`Interned`]: a reference whose equality and hash use the address, for values interned in an
 //!   arena.
-//! - [`SliceInterner`]: interns `[T]` lists in an arena, looking them up by borrowed slice so a hit
-//!   allocates nothing.
+//! - [`SliceInterner`]: interns `[Value]` lists in an arena, looking them up by borrowed slice so a
+//!   hit allocates nothing.
 //! - [`FlaggedInterner`]: interns values together with flags computed once at insertion, so
 //!   properties like "contains an error" are a bit test instead of a walk.
 //! - [`symbols!`](crate::symbols): well-known symbols as `const`s, so keyword checks are integer
@@ -254,9 +254,9 @@ impl<'arena> Interner<'arena> {
 /// value. Ordering still falls back to the value, since addresses carry no meaningful order.
 ///
 /// Modeled on `rustc_data_structures::intern::Interned`.
-pub struct Interned<'arena, T: ?Sized>(&'arena T);
+pub struct Interned<'arena, Value: ?Sized>(&'arena Value);
 
-impl<'arena, T: ?Sized> Interned<'arena, T> {
+impl<'arena, Value: ?Sized> Interned<'arena, Value> {
     /// Wraps a reference to an interned value.
     ///
     /// The value must be unique: no other `Interned` may point to an equal value at another
@@ -265,47 +265,47 @@ impl<'arena, T: ?Sized> Interned<'arena, T> {
     /// not `unsafe`.
     #[inline]
     #[must_use = "wrapping has no side effect"]
-    pub const fn new_unchecked(value: &'arena T) -> Self {
+    pub const fn new_unchecked(value: &'arena Value) -> Self {
         Self(value)
     }
 
     /// Returns the inner reference with its full lifetime.
     #[inline]
     #[must_use = "reading the reference has no side effect"]
-    pub const fn get(self) -> &'arena T {
+    pub const fn get(self) -> &'arena Value {
         self.0
     }
 }
 
-impl<T: ?Sized> Clone for Interned<'_, T> {
+impl<Value: ?Sized> Clone for Interned<'_, Value> {
     fn clone(&self) -> Self {
         *self
     }
 }
 
-impl<T: ?Sized> Copy for Interned<'_, T> {}
+impl<Value: ?Sized> Copy for Interned<'_, Value> {}
 
-impl<T: ?Sized> Deref for Interned<'_, T> {
-    type Target = T;
+impl<Value: ?Sized> Deref for Interned<'_, Value> {
+    type Target = Value;
 
     #[inline]
-    fn deref(&self) -> &T {
+    fn deref(&self) -> &Value {
         self.0
     }
 }
 
-impl<T: ?Sized> PartialEq for Interned<'_, T> {
+impl<Value: ?Sized> PartialEq for Interned<'_, Value> {
     #[inline]
     fn eq(&self, other: &Self) -> bool {
         ptr::eq(self.0, other.0)
     }
 }
 
-impl<T: ?Sized> Eq for Interned<'_, T> {}
+impl<Value: ?Sized> Eq for Interned<'_, Value> {}
 
-impl<T> PartialOrd for Interned<'_, T>
+impl<Value> PartialOrd for Interned<'_, Value>
 where
-    T: ?Sized + PartialOrd,
+    Value: ?Sized + PartialOrd,
 {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         if ptr::eq(self.0, other.0) {
@@ -318,9 +318,9 @@ where
     }
 }
 
-impl<T> Ord for Interned<'_, T>
+impl<Value> Ord for Interned<'_, Value>
 where
-    T: ?Sized + Ord,
+    Value: ?Sized + Ord,
 {
     fn cmp(&self, other: &Self) -> Ordering {
         if ptr::eq(self.0, other.0) {
@@ -333,7 +333,7 @@ where
     }
 }
 
-impl<T: ?Sized> Hash for Interned<'_, T> {
+impl<Value: ?Sized> Hash for Interned<'_, Value> {
     #[inline]
     fn hash<State>(&self, state: &mut State)
     where
@@ -343,21 +343,21 @@ impl<T: ?Sized> Hash for Interned<'_, T> {
     }
 }
 
-impl<T> fmt::Debug for Interned<'_, T>
+impl<Value> fmt::Debug for Interned<'_, Value>
 where
-    T: ?Sized + fmt::Debug,
+    Value: ?Sized + fmt::Debug,
 {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.0.fmt(formatter)
     }
 }
 
-/// Interns slices of `T` in an arena.
+/// Interns slices of `Value` in an arena.
 ///
 /// The lookup hashes the borrowed slice, so interning a list that already exists allocates
 /// nothing; only a miss copies it into the arena. Combined with the stack buffer of
 /// `collect_and_apply` ([`CollectAndApply`](crate::collect::CollectAndApply)), interning from
-/// an iterator of up to 8 items never touches the heap.
+/// an iterator never touches the heap; such an iterator yields 8 items at most.
 ///
 /// ```
 /// use vulcan::{
@@ -373,18 +373,18 @@ where
 /// assert!(lists.intern(&[]).is_empty());
 /// ```
 #[derive(Debug)]
-pub struct SliceInterner<'arena, T> {
+pub struct SliceInterner<'arena, Value> {
     /// The arena that holds every interned list.
     arena: &'arena Bump,
     /// The interned non-empty lists.
-    set: FxHashSet<&'arena [T]>,
+    set: FxHashSet<&'arena [Value]>,
     /// The number of distinct non-empty lists the interner may hold.
     capacity: u32,
 }
 
-impl<'arena, T> SliceInterner<'arena, T>
+impl<'arena, Value> SliceInterner<'arena, Value>
 where
-    T: Copy + Hash + Eq,
+    Value: Copy + Hash + Eq,
 {
     /// Creates an empty interner that allocates in `arena` and allocates its table for
     /// `capacity` distinct non-empty lists.
@@ -407,7 +407,7 @@ where
     ///
     /// Panics if `items` is new and the interner already holds `capacity` lists.
     #[track_caller]
-    pub fn intern(&mut self, items: &[T]) -> Interned<'arena, [T]> {
+    pub fn intern(&mut self, items: &[Value]) -> Interned<'arena, [Value]> {
         if items.is_empty() {
             // Every empty list is the same static slice: no allocation, and never stored.
             assert!(!self.set.contains(items), "the empty list is never stored");
@@ -419,7 +419,7 @@ where
         }
         assert!(self.len() < self.capacity, "the slice interner is full");
         let allocated_bytes_before = self.arena.allocated_bytes();
-        let stored: &'arena [T] = self.arena.allocate_exact(items.iter().copied());
+        let stored: &'arena [Value] = self.arena.allocate_exact(items.iter().copied());
         if self.arena.allocation_limit().is_some() {
             assert_eq!(
                 self.arena.allocated_bytes(),
@@ -435,15 +435,17 @@ where
         Interned::new_unchecked(stored)
     }
 
-    /// Interns the items of an iterator, gathering up to 8 of them on the stack.
+    /// Interns the items of an iterator, gathered on the stack.
     ///
     /// # Panics
     ///
-    /// Panics if the list is new and the interner already holds `capacity` lists.
+    /// Panics if the iterator yields more items than `collect_and_apply` gathers
+    /// ([`INLINE_ITEM_COUNT`](crate::collect::INLINE_ITEM_COUNT)), or if the list is new and the
+    /// interner already holds `capacity` lists.
     #[track_caller]
-    pub fn intern_iter<Items>(&mut self, items: Items) -> Interned<'arena, [T]>
+    pub fn intern_iter<Items>(&mut self, items: Items) -> Interned<'arena, [Value]>
     where
-        Items: Iterator<Item = T>,
+        Items: Iterator<Item = Value>,
     {
         let count_before = self.len();
         let interned = items.collect_and_apply(|slice| self.intern(slice));
@@ -483,29 +485,30 @@ where
 
 /// A value stored with flags computed once, when it was interned.
 ///
-/// Equality and hashing use `value` only, so a [`FlaggedInterner`] can be probed with a plain `&T`.
+/// Equality and hashing use `value` only, so a [`FlaggedInterner`] can be probed with a plain
+/// `&Value`.
 #[derive(Debug, Clone, Copy)]
-pub struct WithFlags<T, F> {
+pub struct WithFlags<Value, Flags> {
     /// The interned value.
-    pub value: T,
+    pub value: Value,
     /// Properties of `value`, computed at insertion.
-    pub flags: F,
+    pub flags: Flags,
 }
 
-impl<T, F> PartialEq for WithFlags<T, F>
+impl<Value, Flags> PartialEq for WithFlags<Value, Flags>
 where
-    T: PartialEq,
+    Value: PartialEq,
 {
     fn eq(&self, other: &Self) -> bool {
         self.value == other.value
     }
 }
 
-impl<T, F> Eq for WithFlags<T, F> where T: Eq {}
+impl<Value, Flags> Eq for WithFlags<Value, Flags> where Value: Eq {}
 
-impl<T, F> Hash for WithFlags<T, F>
+impl<Value, Flags> Hash for WithFlags<Value, Flags>
 where
-    T: Hash,
+    Value: Hash,
 {
     fn hash<State>(&self, state: &mut State)
     where
@@ -515,9 +518,9 @@ where
     }
 }
 
-// Lets the interner's set of `&WithFlags` be searched with a `&T`, without building a key.
-impl<T, F> Borrow<T> for &WithFlags<T, F> {
-    fn borrow(&self) -> &T {
+// Lets the interner's set of `&WithFlags` be searched with a `&Value`, without building a key.
+impl<Value, Flags> Borrow<Value> for &WithFlags<Value, Flags> {
+    fn borrow(&self) -> &Value {
         &self.value
     }
 }
@@ -544,18 +547,18 @@ impl<T, F> Borrow<T> for &WithFlags<T, F> {
 /// assert_eq!(types.intern("uint256", |_| unreachable!("computed once")), valid);
 /// ```
 #[derive(Debug)]
-pub struct FlaggedInterner<'arena, T, F> {
+pub struct FlaggedInterner<'arena, Value, Flags> {
     /// The arena that holds every interned value.
     arena: &'arena Bump,
     /// The interned values with their flags.
-    set: FxHashSet<&'arena WithFlags<T, F>>,
+    set: FxHashSet<&'arena WithFlags<Value, Flags>>,
     /// The number of distinct values the interner may hold.
     capacity: u32,
 }
 
-impl<'arena, T, F> FlaggedInterner<'arena, T, F>
+impl<'arena, Value, Flags> FlaggedInterner<'arena, Value, Flags>
 where
-    T: Hash + Eq,
+    Value: Hash + Eq,
 {
     /// Creates an empty interner that allocates in `arena` and allocates its table for
     /// `capacity` distinct values.
@@ -581,14 +584,17 @@ where
     #[track_caller]
     pub fn intern<Compute>(
         &mut self,
-        value: T,
+        value: Value,
         compute_flags: Compute,
-    ) -> Interned<'arena, WithFlags<T, F>>
+    ) -> Interned<'arena, WithFlags<Value, Flags>>
     where
-        Compute: FnOnce(&T) -> F,
+        Compute: FnOnce(&Value) -> Flags,
     {
         const {
-            assert!(!mem::needs_drop::<WithFlags<T, F>>(), "arena values must not need `Drop`");
+            assert!(
+                !mem::needs_drop::<WithFlags<Value, Flags>>(),
+                "arena values must not need `Drop`"
+            );
         };
         if let Some(&existing) = self.set.get(&value) {
             assert!(existing.value == value, "a hit returns an equal value");
@@ -597,7 +603,7 @@ where
         assert!(self.len() < self.capacity, "the flagged interner is full");
         let flags = compute_flags(&value);
         let allocated_bytes_before = self.arena.allocated_bytes();
-        let stored: &'arena WithFlags<T, F> =
+        let stored: &'arena WithFlags<Value, Flags> =
             &self.arena.allocate_one(WithFlags { value, flags })[0];
         if self.arena.allocation_limit().is_some() {
             assert_eq!(

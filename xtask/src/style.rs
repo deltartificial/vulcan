@@ -41,9 +41,19 @@ impl Syntax {
     }
 }
 
+/// One text file: where it is and what it holds.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct TextFile<'text> {
+    /// The path, relative to the repository root.
+    pub(crate) path: &'text str,
+    /// The whole content.
+    pub(crate) text: &'text str,
+}
+
 /// Returns the violations of every rule of this module in one file.
-pub(crate) fn check_text(path: &str, text: &str, syntax: Syntax) -> Vec<Violation> {
-    let mut violations = check_text_line_widths(path, text);
+pub(crate) fn check_text(file: &TextFile<'_>, syntax: Syntax) -> Vec<Violation> {
+    let TextFile { path, text } = *file;
+    let mut violations = check_text_line_widths(file);
     let blocks = match syntax {
         Syntax::Rust => {
             let mut blocks = check_text_blocks(text, CommentKind::Line);
@@ -62,7 +72,8 @@ pub(crate) fn check_text(path: &str, text: &str, syntax: Syntax) -> Vec<Violatio
 }
 
 /// Reports every line wider than [`LINE_WIDTH_MAX`] characters.
-fn check_text_line_widths(path: &str, text: &str) -> Vec<Violation> {
+fn check_text_line_widths(file: &TextFile<'_>) -> Vec<Violation> {
+    let TextFile { path, text } = *file;
     let violations: Vec<Violation> = text
         .lines()
         .enumerate()
@@ -115,13 +126,13 @@ fn check_text_blocks_comment(line: &str, kind: CommentKind) -> Option<&str> {
     let text = match kind {
         CommentKind::Line => {
             let text = trimmed.strip_prefix("//")?;
-            let doc = text.starts_with('/') || text.starts_with('!');
+            let doc = text.starts_with(['/', '!']);
             if doc { None } else { Some(text) }
         }
         CommentKind::Doc => trimmed.strip_prefix("///").or_else(|| trimmed.strip_prefix("//!")),
         CommentKind::Hash => {
             let text = trimmed.strip_prefix('#')?;
-            let directive = text.starts_with('!') || text.starts_with('[');
+            let directive = text.starts_with(['!', '[']);
             if directive { None } else { Some(text) }
         }
     };
@@ -204,18 +215,25 @@ fn check_text_block_sentences<'text>(block: &CommentBlock<'text>) -> Vec<Sentenc
         let text = line.trim();
         let fence = text.starts_with("```");
         let separator = text.chars().all(|character| !character.is_alphanumeric());
-        let structural = text.starts_with('#') || text.starts_with('|') || text.starts_with("[`");
-        let skipped = block.kind == CommentKind::Doc && (in_code || fence || structural);
+        let structural = if text.starts_with(['#', '|']) { true } else { text.starts_with("[`") };
+        let structure = if in_code { true } else { if fence { true } else { structural } };
+        let skipped = match block.kind {
+            CommentKind::Doc => structure,
+            CommentKind::Line | CommentKind::Hash => false,
+        };
         if fence {
             in_code = !in_code;
         }
-        let outside = skipped || separator;
+        let outside = if skipped { true } else { separator };
         if outside {
             open = false;
         } else {
-            let item = text.starts_with("- ") || text.starts_with("* ");
-            let starts = block.kind == CommentKind::Doc && item;
-            let continues = open && !starts;
+            let item = ["- ", "* "].iter().any(|marker| text.starts_with(marker));
+            let starts = match block.kind {
+                CommentKind::Doc => item,
+                CommentKind::Line | CommentKind::Hash => false,
+            };
+            let continues = if open { !starts } else { false };
             match sentences.last_mut() {
                 Some((_, lines)) if continues => lines.push(text),
                 Some(_) | None => sentences.push((offset, vec![text])),
@@ -238,8 +256,11 @@ fn check_text_block_sentence_problem(lines: &[&str]) -> Option<&'static str> {
     let opening_text =
         first.strip_prefix("- ").or_else(|| first.strip_prefix("* ")).map_or(*first, |item| item);
     let opening = opening_text.chars().next()?;
-    let opens_well =
-        opening.is_uppercase() || opening.is_ascii_digit() || "`\"'([*<".contains(opening);
+    let opens_well = if opening.is_uppercase() {
+        true
+    } else {
+        if opening.is_ascii_digit() { true } else { "`\"'([*<".contains(opening) }
+    };
     let closes_well = last.ends_with(['.', ':', '?', '!']);
     let problem = if opens_well {
         if closes_well {
@@ -262,7 +283,7 @@ mod tests {
 
     /// Returns the messages of every violation in a Rust file.
     fn rust(text: &str) -> Vec<String> {
-        check_text("a.rs", text, Syntax::Rust)
+        check_text(&TextFile { path: "a.rs", text }, Syntax::Rust)
             .into_iter()
             .map(|violation| violation.message)
             .collect()
@@ -273,11 +294,12 @@ mod tests {
     #[test]
     fn line_width_limit_is_inclusive() {
         let limit = usize::try_from(LINE_WIDTH_MAX).map_or(0, |width| width);
-        assert!(check_text_line_widths("a.rs", &"x".repeat(limit)).is_empty());
-        let violations = check_text_line_widths("a.rs", &format!("ok\n{}", "x".repeat(limit + 1)));
+        let widths = |text: &str| check_text_line_widths(&TextFile { path: "a.rs", text });
+        assert!(widths(&"x".repeat(limit)).is_empty());
+        let violations = widths(&format!("ok\n{}", "x".repeat(limit + 1)));
         assert_eq!(violations.len(), 1);
         assert_eq!(violations[0].line_number, 2);
-        assert!(check_text_line_widths("a.md", &"\u{e9}".repeat(limit)).is_empty());
+        assert!(widths(&"\u{e9}".repeat(limit)).is_empty());
     }
 
     /// Accepts sentences and trailing phrases, and flags a lower-case start, a missing full stop
@@ -309,16 +331,18 @@ mod tests {
     #[test]
     fn hash_comments_are_checked() {
         let valid = "# ======\n# A section.\nkey = 1 # a trailing note\n";
-        assert!(check_text("a.toml", valid, Syntax::Hash).is_empty());
-        assert_eq!(check_text("a.yml", "# no capital.\n", Syntax::Hash).len(), 1);
+        let toml = TextFile { path: "a.toml", text: valid };
+        assert!(check_text(&toml, Syntax::Hash).is_empty());
+        let yaml = TextFile { path: "a.yml", text: "# no capital.\n" };
+        assert_eq!(check_text(&yaml, Syntax::Hash).len(), 1);
         assert!(Syntax::from_extension("lock").is_none(), "lock files are not checked");
     }
 
     /// Starts a new block when the indentation changes, so each block is judged on its own.
     #[test]
     fn indentation_change_starts_a_new_block() {
-        let violations =
-            check_text("a.rs", "// Outer.\n    // inner without a capital.", Syntax::Rust);
+        let file = TextFile { path: "a.rs", text: "// Outer.\n    // inner without a capital." };
+        let violations = check_text(&file, Syntax::Rust);
         assert_eq!(violations.len(), 1);
         assert_eq!(violations[0].line_number, 2);
     }

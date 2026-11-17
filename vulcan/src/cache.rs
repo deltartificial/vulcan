@@ -12,9 +12,9 @@
 //! which is a programmer error, and it panics.
 //!
 //! Values are `Copy`, so a hit never clones or bumps a reference count. Large results belong in
-//! an arena, and the cache stores the `&'arena T`.
+//! an arena, and the cache stores the `&'arena Referent`.
 //!
-//! [`Cache<K, V>`] names the cache chosen for `K` through [`CacheKey`]:
+//! [`Cache<Key, Value>`] names the cache chosen for `Key` through [`CacheKey`]:
 //!
 //! ```
 //! use vulcan::cache::{Cache, QueryCache};
@@ -39,43 +39,43 @@ use parking_lot::RwLock;
 use rustc_hash::{FxBuildHasher, FxHashMap};
 use std::sync::OnceLock;
 
-/// A thread-safe memoization cache from `K` to `V`.
-pub trait QueryCache<K, V: Copy> {
+/// A thread-safe memoization cache from `Key` to `Value`.
+pub trait QueryCache<Key, Value: Copy> {
     /// Creates an empty cache and allocates room for `capacity` values: the number of distinct
     /// keys, which for a dense cache are the indices `0..capacity`.
     fn with_capacity(capacity: u32) -> Self;
 
     /// Returns the cached value for `key`.
-    fn get(&self, key: K) -> Option<V>;
+    fn get(&self, key: Key) -> Option<Value>;
 
     /// Returns the cached value for `key`, computing and storing it with `compute` on a miss.
-    fn get_or_insert_with<F>(&self, key: K, compute: F) -> V
+    fn get_or_insert_with<Compute>(&self, key: Key, compute: Compute) -> Value
     where
-        F: FnOnce() -> V;
+        Compute: FnOnce() -> Value;
 }
 
 /// Selects the cheapest cache for a key type.
 pub trait CacheKey: Copy {
     /// The cache used for this key type.
-    type Cache<V: Copy>: QueryCache<Self, V>;
+    type Cache<Value: Copy>: QueryCache<Self, Value>;
 }
 
-/// The cache selected for key type `K`.
-pub type Cache<K, V> = <K as CacheKey>::Cache<V>;
+/// The cache selected for key type `Key`.
+pub type Cache<Key, Value> = <Key as CacheKey>::Cache<Value>;
 
 /// Ties a cache to its key type without storing a key.
-type KeyMarker<K> = PhantomData<fn() -> K>;
+type KeyMarker<Key> = PhantomData<fn() -> Key>;
 
 /// One slot per index, allocated when the cache is created.
 ///
 /// Concurrent misses on the same key run `compute` once: other threads wait for the first
 /// result.
 #[derive(Debug)]
-pub struct DenseCache<K, V> {
+pub struct DenseCache<Key, Value> {
     /// One slot per key; the number of slots is the capacity, so it is not stored twice.
-    slots: Box<[OnceLock<V>]>,
+    slots: Box<[OnceLock<Value>]>,
     /// The key type.
-    _key: KeyMarker<K>,
+    _key: KeyMarker<Key>,
 }
 
 // A dense cache is a boxed slice and nothing else: its pointer and its length.
@@ -84,7 +84,7 @@ const _: () = assert!(
     "a dense cache holds only its slots"
 );
 
-impl<K: TypedIndex, V: Copy> QueryCache<K, V> for DenseCache<K, V> {
+impl<Key: TypedIndex, Value: Copy> QueryCache<Key, Value> for DenseCache<Key, Value> {
     fn with_capacity(capacity: u32) -> Self {
         let slot_count = usize_from_u32(capacity);
         let mut slot_list = Vec::with_capacity(slot_count);
@@ -98,7 +98,7 @@ impl<K: TypedIndex, V: Copy> QueryCache<K, V> for DenseCache<K, V> {
 
     #[inline]
     #[track_caller]
-    fn get(&self, key: K) -> Option<V> {
+    fn get(&self, key: Key) -> Option<Value> {
         let position = key.index();
         assert!(position < self.slots.len(), "key beyond the capacity of the dense cache");
         self.slots[position].get().copied()
@@ -106,9 +106,9 @@ impl<K: TypedIndex, V: Copy> QueryCache<K, V> for DenseCache<K, V> {
 
     #[inline]
     #[track_caller]
-    fn get_or_insert_with<F>(&self, key: K, compute: F) -> V
+    fn get_or_insert_with<Compute>(&self, key: Key, compute: Compute) -> Value
     where
-        F: FnOnce() -> V,
+        Compute: FnOnce() -> Value,
     {
         let position = key.index();
         assert!(position < self.slots.len(), "key beyond the capacity of the dense cache");
@@ -124,14 +124,14 @@ impl<K: TypedIndex, V: Copy> QueryCache<K, V> for DenseCache<K, V> {
 /// Hits take the read lock only. On a concurrent miss `compute` may run on several threads; the
 /// first value stored wins, so `compute` must be deterministic.
 #[derive(Debug)]
-pub struct MapCache<K, V> {
+pub struct MapCache<Key, Value> {
     /// The cached values, allocated with room for `capacity` keys.
-    map: RwLock<FxHashMap<K, V>>,
+    map: RwLock<FxHashMap<Key, Value>>,
     /// The number of distinct keys the cache may hold, which it never exceeds.
     capacity: u32,
 }
 
-impl<K: Hash + Eq, V: Copy> QueryCache<K, V> for MapCache<K, V> {
+impl<Key: Hash + Eq, Value: Copy> QueryCache<Key, Value> for MapCache<Key, Value> {
     fn with_capacity(capacity: u32) -> Self {
         let map = FxHashMap::with_capacity_and_hasher(usize_from_u32(capacity), FxBuildHasher);
         assert!(map.capacity() >= usize_from_u32(capacity), "the allocation covers the capacity");
@@ -140,7 +140,7 @@ impl<K: Hash + Eq, V: Copy> QueryCache<K, V> for MapCache<K, V> {
     }
 
     #[inline]
-    fn get(&self, key: K) -> Option<V> {
+    fn get(&self, key: Key) -> Option<Value> {
         let map = self.map.read();
         assert!(u32_from_usize(map.len()) <= self.capacity, "the cache stays within capacity");
         assert!(map.capacity() >= usize_from_u32(self.capacity), "the allocation is kept");
@@ -148,9 +148,9 @@ impl<K: Hash + Eq, V: Copy> QueryCache<K, V> for MapCache<K, V> {
     }
 
     #[track_caller]
-    fn get_or_insert_with<F>(&self, key: K, compute: F) -> V
+    fn get_or_insert_with<Compute>(&self, key: Key, compute: Compute) -> Value
     where
-        F: FnOnce() -> V,
+        Compute: FnOnce() -> Value,
     {
         {
             let map = self.map.read();
@@ -181,9 +181,9 @@ impl<K: Hash + Eq, V: Copy> QueryCache<K, V> for MapCache<K, V> {
 
 /// A single slot, for queries without arguments.
 #[derive(Debug)]
-pub struct UnitCache<V> {
+pub struct UnitCache<Value> {
     /// The value of the one key, `()`.
-    slot: OnceLock<V>,
+    slot: OnceLock<Value>,
 }
 
 // A unit cache is its slot and nothing else.
@@ -192,7 +192,7 @@ const _: () = assert!(
     "a unit cache holds only its slot"
 );
 
-impl<V: Copy> QueryCache<(), V> for UnitCache<V> {
+impl<Value: Copy> QueryCache<(), Value> for UnitCache<Value> {
     /// Creates an empty cache for the one key `()`.
     ///
     /// # Panics
@@ -207,14 +207,14 @@ impl<V: Copy> QueryCache<(), V> for UnitCache<V> {
     }
 
     #[inline]
-    fn get(&self, (): ()) -> Option<V> {
+    fn get(&self, (): ()) -> Option<Value> {
         self.slot.get().copied()
     }
 
     #[inline]
-    fn get_or_insert_with<F>(&self, (): (), compute: F) -> V
+    fn get_or_insert_with<Compute>(&self, (): (), compute: Compute) -> Value
     where
-        F: FnOnce() -> V,
+        Compute: FnOnce() -> Value,
     {
         let value = *self.slot.get_or_init(compute);
         assert!(self.slot.get().is_some(), "the slot is filled after a lookup");
@@ -223,14 +223,14 @@ impl<V: Copy> QueryCache<(), V> for UnitCache<V> {
 }
 
 impl CacheKey for () {
-    type Cache<V: Copy> = UnitCache<V>;
+    type Cache<Value: Copy> = UnitCache<Value>;
 }
 
 /// Selects the map cache for each listed key type.
 macro_rules! map_keys {
     ($($key:ty),*) => {$(
         impl CacheKey for $key {
-            type Cache<V: Copy> = MapCache<Self, V>;
+            type Cache<Value: Copy> = MapCache<Self, Value>;
         }
     )*};
 }
@@ -238,11 +238,11 @@ macro_rules! map_keys {
 map_keys!(bool, char, u8, u16, u32, u64, u128, usize, i8, i16, i32, i64, i128, isize);
 
 impl<First: Hash + Eq + Copy, Second: Hash + Eq + Copy> CacheKey for (First, Second) {
-    type Cache<V: Copy> = MapCache<Self, V>;
+    type Cache<Value: Copy> = MapCache<Self, Value>;
 }
 
-impl<T: ?Sized + Hash + Eq> CacheKey for &'static T {
-    type Cache<V: Copy> = MapCache<Self, V>;
+impl<Referent: ?Sized + Hash + Eq> CacheKey for &'static Referent {
+    type Cache<Value: Copy> = MapCache<Self, Value>;
 }
 
 #[cfg(test)]

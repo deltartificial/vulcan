@@ -33,14 +33,16 @@ check the rest.
   and a cognitive complexity of 15 at most.
 - **No recursion.** A function never calls itself, directly or through others. Rewrite recursion as
   a loop over an explicit stack with a fixed capacity, so every execution that should be bounded is
-  bounded.
+  bounded. The check follows the calls between the functions of one file; a cycle that crosses files
+  is left to review.
 - **A minimum of abstractions, and only excellent ones.** An abstraction is never free: it costs
   reading time, and it can leak. Add one only when it is the best model of the domain.
 - **Put a limit on everything.** Every loop has a fixed upper bound and every queue a fixed capacity
   (`vulcan::bounded`, `std::sync::mpsc::sync_channel`), so a broken assumption fails fast instead of
-  looping forever or spiking latency. Loops are `for` loops over a range or a collection: there is
-  no `while` and no `loop`. A loop that must never end (an event loop) returns `!`, which asserts
-  that it cannot terminate.
+  looping forever or spiking latency. Work handed to a thread pool is a queue too: a
+  `sync::WorkerPool` takes one batch at a time, of at most `batch_item_count_max` items. Loops are
+  `for` loops over a range or a collection: there is no `while` and no `loop`. A loop that must
+  never end (an event loop) returns `!`, which asserts that it cannot terminate.
 - **Explicitly sized integers.** Indices, counts and capacities are `u32` (or the type the domain
   needs), never the architecture-specific `usize`. `usize` appears only where Rust requires it, to
   index a slice or read its length, and it crosses into `u32` through `vulcan::convert` alone.
@@ -57,7 +59,10 @@ to find.
 
 - **Assert every argument, return value, precondition, postcondition and invariant.** A function
   does not operate on data it has not checked. The code averages at least **two assertions per
-  function**.
+  function**, and a function of several statements holds at least one: only a function that is a
+  single expression, a delegation or an accessor, has no data of its own to check.
+- **No assertion restates the line above it.** `let sum = a + b; assert!(sum == a + b)` checks
+  nothing. Assert what could be wrong: an argument, an invariant, the state left behind.
 - **Pair assertions.** For every property, find at least two code paths that can check it: before
   data is written and after it is read back, where an index is created and where it is used.
 - **Assert what must hold and what must not.** Check the expected state and also what must not
@@ -65,7 +70,10 @@ to find.
   at the boundary between valid and invalid.
 - **One condition per assertion.** `assert!(a); assert!(b);` is simpler to read and says which one
   failed; `assert!(a && b)` does not.
-- **Implications as `if`.** Write "a implies b" as `if a { assert!(b, ..) }`.
+- **Implications as `if`.** Write "a implies b" as `if a { assert!(b, ..) }`, never as
+  `assert!(!a || b, ..)`.
+- **Assert what the program controls.** The state of the file system, the network or another process
+  is not an invariant: check it and return an error.
 - **Assert the relations of compile-time constants.** `const _: () = assert!(..)` and
   `static_assert_size!` check the design before the program runs: a mask is a power of two, a
   threshold is below another, a hot type keeps its size.
@@ -96,6 +104,15 @@ to find.
 - **Build large values in place.** A value too large to move cheaply is created once and then reset
   or filled through `&mut` (`clear`, `reset`, `fill`), not rebuilt and moved. Once a field is built
   in place, the container that holds it is too.
+- **No buffer bleeds.** A buffer that is reused or only partly filled still holds what it held
+  before: the bytes past the new length, and the padding inside and between values. Zero them, or
+  hand out the filled part only (`&buffer[..length]`), before the buffer is written to disk, sent,
+  hashed or compared. Stale bytes leak what the previous use stored, and they make two runs on the
+  same input differ.
+- **Threads are made at startup too.** A `vulcan::sync::WorkerPool` spawns its threads and allocates
+  its slots when it is created, and maps into buffers of the caller, so a batch allocates nothing.
+  What a thread allocates on first use (its arena of a `ThreadArenas`, a thread-local table) is
+  allocated by the start handler of the pool, before the seal.
 
 ## 6. Functions
 
@@ -128,9 +145,10 @@ to find.
 ## 8. Conditions and Errors
 
 - **Split compound conditions.** Nested `if`/`else` makes every case visible; `a && b || c` hides
-  some. An `if` tests one condition: split a compound one into nested `if`s, or give it a name
-  (`let ready = open && idle;`). An `else if` chain is a tree of `else { if .. }`, and it ends with
-  an `else`.
+  some. There is no `&&` and no `||`, anywhere: several conditions are nested `if`s, or a `match`
+  over the cases, also where they only compute a value (`if open { idle } else { false }`). A
+  condition therefore cannot be compound, in place, over several lines or behind a name. An
+  `else if` chain is a tree of `else { if .. }`, and it ends with an `else`.
 - **Consider the `else`.** For every `if`, decide what happens when the condition is false, and
   handle or assert it.
 - **State conditions positively.** `if index < count` is easier to check than
@@ -147,9 +165,9 @@ to find.
   finder states its prefilter, an arena its capacity), so a change of library default can never
   change a program silently. A suggested value is a named constant passed on purpose.
 - **Named arguments.** Arguments that can be mixed up go in a struct with named fields: a function
-  takes at most one argument of each primitive type, and an optional argument is a named field,
-  never a positional `Option`. Enums replace booleans: `par_map(Parallelism::Serial, ..)` says what
-  `par_map(false, ..)` hides.
+  takes at most one argument of each type (two `u32`, two `&str`, two `&Path`), and an optional
+  argument is a named field, never a positional `Option`. Enums replace booleans:
+  `ThreadCount::Available` says what `true` hides.
 - **Singletons go first, positionally.** Dependencies with a unique type (an arena, a context) are
   passed to constructors positionally, from the most general to the most specific.
 - **Callbacks go last** in a parameter list, since they run last.
@@ -163,7 +181,8 @@ to find.
   model, and shows that its author understood the domain. Take the time to find names that work
   together.
 - **`snake_case`** for functions, variables, modules and files.
-- **No abbreviations.** `predicate`, not `pred`; `formatter`, not `f`; `'arena`, not `'a`. Single
+- **No abbreviations.** `predicate`, not `pred`; `formatter`, not `f`; `'arena`, not `'a`;
+  `PARALLEL_LEN_MIN`, not `PAR_LEN_MIN`; a type parameter is a word too, `Item`, not `T`. Single
   letters are kept for integer counters of sorting and matrix code (`i`, `j`, `k`). Scripts and CI
   use long flags: `--workspace`, not `-w`; single letters are for typing at a prompt.
 - **Acronyms in capitals**, where Rust's casing allows it: `SIMD`, `UTF8`.
@@ -249,17 +268,21 @@ The hot-path conventions that follow from these rules are in [PERFORMANCE.md](PE
 | Function length, parameters, nesting        | thresholds in `clippy.toml`                     |
 | No recursion, no `while`/`loop`, no `if !`  | `cargo xtask style`                             |
 | Bounded queues                              | `mpsc::channel` and `thread::sleep` banned      |
+| The same lints on the fuzz targets          | `cargo xtask clippy-fuzz`, a test of `xtask`    |
 | Sized integers, lossless casts              | `as_conversions`, `vulcan::convert`             |
 | Two assertions per function, in every build | `cargo xtask style`; `debug_assert!` banned     |
-| One condition and a message per assertion   | `missing_assert_message`, review                |
-| Static allocation                           | `StaticAllocator`, `tests/static_allocation.rs` |
+| No function of several statements is blind  | `cargo xtask style`                             |
+| One condition and a message per assertion   | `cargo xtask style`, `missing_assert_message`   |
+| Static allocation, thread pool included     | `StaticAllocator`, `tests/static_allocation.rs` |
 | Errors handled, results used                | `unwrap_used`, `panic`, `unused_results`        |
-| Split, positive conditions                  | `cargo xtask style`, `else_if_without_else`     |
+| No `&&`, no `\|\|`, no `if !`               | `cargo xtask style`, `else_if_without_else`     |
 | Options passed explicitly                   | `Default::default` banned                       |
 | Named arguments                             | `cargo xtask style`, `max-fn-params-bools`      |
 | Large values by reference                   | `large_types_passed_by_value` at 16 bytes       |
 | Explicit division                           | `integer_division`, `modulo_arithmetic`         |
 | No abbreviations, no shadowing              | `disallowed-names`, `shadow_*`, lifetimes lint  |
+| Type parameters are words                   | `cargo xtask style`                             |
+| No buffer bleeds                            | review                                          |
 | Helpers named after their caller, `main`    | `cargo xtask style`                             |
 | Described tests, comments as sentences      | `cargo xtask style`, `missing_docs_*`           |
 | Every exception says why                    | `allow_attributes_without_reason`               |

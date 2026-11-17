@@ -116,11 +116,11 @@ them.
 | `intern`     | `Symbol` interner, `symbols!` consts, slice and flagged interners, `Interned` |
 | `layout`     | `static_assert_size!` budgets, 8-byte `Span` aligned to 4                     |
 | `cache`      | Caches picked by key type (dense slots for indices, no hashing)               |
-| `collect`    | `collect_and_apply`: up to 8 items without touching the heap                  |
+| `collect`    | `collect_and_apply`: 8 items at most, never touching the heap                 |
 | `bit_set`    | `DenseBitSet` over typed indices, inline up to 128 bits                       |
 | `bytes`      | 256-entry byte class table, `memchr` cursor, `StaticFinder`                   |
 | `hint`       | `likely`, `unlikely`, `cold_path`, `outline`                                  |
-| `sync`       | `Parallelism`, size thresholds, ordered `par_map`, sharded merge, `LazyPool`  |
+| `sync`       | `WorkerPool` made at start-up, ordered `map`, size threshold, `ShardedMap`    |
 | `diagnostic` | `ErrorGuaranteed`, diagnostics buffered per task and replayed in order        |
 | `never`      | `Never` on stable, `into_ok` / `into_value` for infallible results            |
 | `bounded`    | `BoundedVec` and `BoundedQueue`: fixed capacity, never reallocate             |

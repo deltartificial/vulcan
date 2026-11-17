@@ -1,32 +1,50 @@
+//! Fuzz target: a `Cursor` against a plain offset into the input.
+
 #![no_main]
 
 use libfuzzer_sys::fuzz_target;
 use vulcan::{
-    bytes::{Cursor, is_id_continue, is_whitespace},
+    bytes::{Cursor, is_identifier_continue, is_whitespace},
     convert::usize_from_u32,
+    division::Divide as _,
 };
 
 /// Returns the length of the whitespace run at the start of `bytes`, by the standard library.
 fn whitespace_length(bytes: &[u8]) -> usize {
-    bytes.iter().take_while(|byte| byte.is_ascii_whitespace() || **byte == 0x0b).count()
+    bytes
+        .iter()
+        .take_while(|byte| if byte.is_ascii_whitespace() { true } else { **byte == 0x0b })
+        .count()
 }
 
 /// Returns the length of the identifier run at the start of `bytes`, by the standard library.
 fn identifier_length(bytes: &[u8]) -> usize {
-    let continues = |byte: &&u8| byte.is_ascii_alphanumeric() || **byte == b'_' || **byte == b'$';
+    let continues = |byte: &&u8| {
+        if byte.is_ascii_alphanumeric() { true } else { matches!(**byte, b'_' | b'$') }
+    };
     bytes.iter().take_while(continues).count()
 }
 
-/// Returns the index of the first occurrence of `needle` in `haystack`, by a naive search.
-fn find(haystack: &[u8], needle: &[u8]) -> Option<usize> {
-    haystack.windows(needle.len()).position(|window| window == needle)
+/// Bytes to search for in others.
+struct Search<'input> {
+    /// The bytes searched.
+    haystack: &'input [u8],
+    /// The bytes searched for.
+    needle: &'input [u8],
+}
+
+/// Returns the index of the first occurrence of the needle in the haystack, by a naive search.
+fn find(search: &Search<'_>) -> Option<usize> {
+    search.haystack.windows(search.needle.len()).position(|window| window == search.needle)
 }
 
 /// Returns a needle of one to four bytes copied from `rest`, so that searches often succeed.
 fn needle_from(rest: &[u8], selector: u8) -> &[u8] {
-    let start = usize::from(selector >> 2) % rest.len().max(1);
+    let start = usize::from(selector >> 2_u32).remainder(rest.len().max(1));
     let length = usize::from(selector & 3) + 1;
-    rest.get(start..).map_or(&[], |tail| &tail[..length.min(tail.len())])
+    let needle: &[u8] = rest.get(start..).map_or(&[], |tail| &tail[..length.min(tail.len())]);
+    assert!(needle.len() <= 4, "a needle of four bytes at most");
+    needle
 }
 
 // Drives a cursor and a model, a plain offset into the input, with the same operations. The first
@@ -42,7 +60,7 @@ fuzz_target!(|data: &[u8]| {
     for pair in operations.chunks(2) {
         let selector = pair.get(1).copied().map_or(0, |byte| byte);
         let rest = &input[model..];
-        match pair[0] % 7 {
+        match pair[0].remainder(7) {
             0 => {
                 let expected = rest.first().copied();
                 model += usize::from(expected.is_some());
@@ -56,7 +74,11 @@ fuzz_target!(|data: &[u8]| {
             2 => {
                 let length = identifier_length(rest);
                 model += length;
-                assert_eq!(cursor.eat_while(is_id_continue), &rest[..length], "the identifier run");
+                assert_eq!(
+                    cursor.eat_while(is_identifier_continue),
+                    &rest[..length],
+                    "the identifier run"
+                );
             }
             3 => {
                 // A prefix copied from the input matches when it was copied from its start.
@@ -80,7 +102,7 @@ fuzz_target!(|data: &[u8]| {
                 if needle.is_empty() {
                     assert!(rest.is_empty(), "only an empty rest gives an empty needle");
                 } else {
-                    let found = find(rest, needle);
+                    let found = find(&Search { haystack: rest, needle });
                     model += found.map_or(rest.len(), |start| start + needle.len());
                     assert_eq!(cursor.skip_past(needle), found.is_some(), "`skip_past` finds it");
                 }
@@ -88,7 +110,7 @@ fuzz_target!(|data: &[u8]| {
             _ => {
                 // A needle chosen by the fuzzer, which is usually absent from the input.
                 let needle = [selector, pair[0]];
-                let found = find(rest, &needle);
+                let found = find(&Search { haystack: rest, needle: &needle });
                 model += found.map_or(rest.len(), |start| start + needle.len());
                 assert_eq!(cursor.skip_past(&needle), found.is_some(), "`skip_past` finds it");
             }

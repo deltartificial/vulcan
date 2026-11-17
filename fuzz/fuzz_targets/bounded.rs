@@ -1,10 +1,15 @@
+//! Fuzz target: the bounded queue and vector against unbounded models.
+
 #![no_main]
 
+extern crate alloc;
+
+use alloc::collections::VecDeque;
 use libfuzzer_sys::fuzz_target;
-use std::collections::VecDeque;
 use vulcan::{
     bounded::{BoundedQueue, BoundedVec},
     convert::usize_from_u32,
+    division::Divide as _,
 };
 
 // Drives the bounded collections and unbounded models with the same operations. The first byte
@@ -21,7 +26,7 @@ fuzz_target!(|data: &[u8]| {
     let mut stack_model = Vec::with_capacity(capacity_usize);
 
     for &operation in operations {
-        match operation % 8 {
+        match operation.remainder(8) {
             0 | 1 => {
                 let has_room = queue_model.len() < capacity_usize;
                 let pushed = queue.push_back(operation);
@@ -32,7 +37,9 @@ fuzz_target!(|data: &[u8]| {
                     assert_eq!(pushed, Err(operation), "a refused item is handed back");
                 }
             }
-            2 => assert_eq!(queue.pop_front(), queue_model.pop_front()),
+            2 => {
+                assert_eq!(queue.pop_front(), queue_model.pop_front(), "the oldest item comes out");
+            }
             3 | 4 => {
                 let has_room = stack_model.len() < capacity_usize;
                 let pushed = stack.push(operation);
@@ -43,7 +50,7 @@ fuzz_target!(|data: &[u8]| {
                     assert_eq!(pushed, Err(operation), "a refused item is handed back");
                 }
             }
-            5 => assert_eq!(stack.pop(), stack_model.pop()),
+            5 => assert_eq!(stack.pop(), stack_model.pop(), "the newest item comes out"),
             6 => {
                 queue = queue.clone();
                 stack = stack.clone();
@@ -62,9 +69,9 @@ fuzz_target!(|data: &[u8]| {
         assert_eq!(stack.as_slice(), stack_model.as_slice(), "the stack matches the model");
         assert_eq!(queue.capacity(), capacity, "the queue keeps its capacity");
         assert_eq!(stack.capacity(), capacity, "the stack keeps its capacity");
-        assert_eq!(queue.is_full(), queue_model.len() == capacity_usize);
-        assert_eq!(stack.is_full(), stack_model.len() == capacity_usize);
-        assert_eq!(queue.is_empty(), queue_model.is_empty());
-        assert_eq!(stack.is_empty(), stack_model.is_empty());
+        assert_eq!(queue.is_full(), queue_model.len() == capacity_usize, "the queue is full");
+        assert_eq!(stack.is_full(), stack_model.len() == capacity_usize, "the stack is full");
+        assert_eq!(queue.is_empty(), queue_model.is_empty(), "the queue is empty");
+        assert_eq!(stack.is_empty(), stack_model.is_empty(), "the stack is empty");
     }
 });

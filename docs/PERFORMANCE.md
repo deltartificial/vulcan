@@ -13,16 +13,16 @@ The general rules (assertions, limits, naming, design) are in [CODING.md](CODING
 | 5  | Compile-time type size assertions                            | `vulcan::layout`     |
 | 6  | Branch hints and cold-path outlining                         | `vulcan::hint`       |
 | 7  | Lookup-table byte classification, `memchr` scans             | `vulcan::bytes`      |
-| 8  | Opt-in rayon scope and ordered `par_try_map`                 | `vulcan::sync`       |
+| 8  | `WorkerPool`: ordered map on threads made at startup         | `vulcan::sync`       |
 | 9  | Instruction-count benchmarks with CodSpeed                   | `vulcan/benches`     |
 | 10 | Nightly-only fast paths behind `--cfg vulcan_nightly`        | `vulcan::hint`       |
 | 11 | Size thresholds before going parallel                        | `vulcan::sync`       |
-| 12 | Per-thread fold, then sharded lock-free merge                | `vulcan::sync`       |
-| 13 | Lazily built, named rayon pool; no pool for 1 thread         | `vulcan::sync`       |
+| 12 | Per-thread `ShardedMap`, merged in place                     | `vulcan::sync`       |
+| 13 | Named worker threads; no worker for 1 thread                 | `vulcan::sync`       |
 | 14 | Diagnostics buffered per task, committed in order            | `vulcan::diagnostic` |
 | 15 | `ErrorGuaranteed` zero-sized error proof                     | `vulcan::diagnostic` |
 | 16 | Caches picked by key type (dense slots for indices)          | `vulcan::cache`      |
-| 17 | `collect_and_apply`: 0 to 8 items without the heap           | `vulcan::collect`    |
+| 17 | `collect_and_apply`: 8 items at most, without the heap       | `vulcan::collect`    |
 | 18 | `Never` on stable, infallible `ControlFlow`/`Result`         | `vulcan::never`      |
 | 19 | `Span`: 8 bytes, aligned to 4                                | `vulcan::layout`     |
 | 20 | `symbols!` pre-interned constants                            | `vulcan::intern`     |
@@ -30,7 +30,7 @@ The general rules (assertions, limits, naming, design) are in [CODING.md](CODING
 | 22 | `DenseBitSet` over typed indices, inline up to 128 bits      | `vulcan::bit_set`    |
 | 24 | Fixed-capacity vector and queue that never reallocate        | `vulcan::bounded`    |
 | 25 | Division with explicit rounding                              | `vulcan::division`   |
-| 26 | `Parallelism` enum instead of a `bool` switch                | `vulcan::sync`       |
+| 26 | A pool that allocates nothing after it is created            | `vulcan::sync`       |
 
 ## Principles
 
@@ -39,8 +39,8 @@ The general rules (assertions, limits, naming, design) are in [CODING.md](CODING
 - **Integers over pointers.** Indices and symbols are `u32` newtypes with a niche, so `Option<Id>`
   costs nothing.
 - **Keep the hot path hot.** Rare branches are marked cold and moved out of line.
-- **Parallelism is opt-in and deterministic.** Results come back in input order, and the
-  single-threaded path pays no rayon overhead.
+- **Parallelism is opt-in and deterministic.** Results come back in input order, and a pool of one
+  thread has no worker: it maps on the caller's thread.
 - **Design before measuring.** The large wins are decided in the design, from a sketch of the cost
   on network, disk, memory and CPU; profiling only refines it.
 - **Batch, then run straight.** Validate and decide once per batch (the control plane), then process
@@ -85,10 +85,11 @@ These are rules for every hot path, not modules. Reviewers (human or AI) should 
   (`vulcan::bounded::BoundedVec`), so its depth is a limit checked like any other.
 - **Reuse buffers.** Prefer `clear()` and `mem::swap` with a scratch buffer over allocating a new
   `Vec` per iteration; preallocate with ratios you have measured.
-- **Parallel only past a threshold.** Use the helpers of `vulcan::sync`, which stay serial below
-  `PAR_LEN_MIN`; never call `par_iter` on input whose size you do not know.
-- **Deterministic output.** Parallel tasks never emit diagnostics directly; they use
-  `DiagnosticContext::par_map` or a `DiagnosticBatch`.
+- **Parallel only past a threshold.** Map with a `vulcan::sync::WorkerPool`, which stays on the
+  caller's thread below `parallel_item_count_min` items (`PARALLEL_LEN_MIN` is a suggested value);
+  never spawn threads for input whose size you do not know.
+- **Deterministic output.** Parallel tasks never emit diagnostics directly; each returns a
+  `DiagnosticBatch` with its output, and the caller commits the batches in output order.
 - **Copy values in caches.** A cache hit returns a `Copy` value or an arena reference, never a clone
   or an `Arc`.
 - **No owning fields in hot nodes.** No `String`, `Vec`, `Rc`, `Arc` or `Box<dyn _>` inside AST/IR

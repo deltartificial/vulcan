@@ -2,25 +2,30 @@
 //!
 //! - **Assertion density**: the code averages at least [`ASSERTION_DENSITY_MIN`] assertions per
 //!   function, so functions do not operate on data they have not checked.
-//! - **No recursion**: a function never calls itself, so every execution that should be bounded is
-//!   bounded.
+//! - **No blind function**: in the code whose density is counted, a function of several statements
+//!   holds at least one assertion. Only a function that is a single expression, a delegation or an
+//!   accessor, may hold none: it has no data of its own to check.
+//! - **No recursion**: a function never calls itself, directly or through other functions of its
+//!   file, so every execution that should be bounded is bounded.
 //! - **Bounded loops**: no `while` and no `loop`. A `for` loop over a range or a collection has a
 //!   fixed upper bound.
 //! - **Positive conditions**: no `if !`.
-//! - **Simple conditions**: an `if` tests one condition, not `a && b` or `a || b`, and an assertion
-//!   checks one condition, not `a && b`.
+//! - **Simple conditions**: there is no `&&` and no `||`, in an `if`, in an assertion or anywhere
+//!   else, so a condition cannot be compound, in place, over several lines or behind a name.
+//!   Several conditions are nested `if`s or a `match` over the cases, which shows every case.
 //! - **Described tests**: every test opens with a doc comment that says what it checks and how.
 //! - **Helpers named after their caller**: a private function called from one function only is
 //!   named after it, so its name shows the call history.
-//! - **Named arguments**: a function takes at most one argument of each primitive type, and no
-//!   `Option` argument; arguments that could be mixed up go in a struct with named fields.
+//! - **Named arguments**: a function takes at most one argument of each type, and no `Option`
+//!   argument; arguments that could be mixed up go in a struct with named fields.
+//! - **Named type parameters**: a type parameter is a word (`Item`), not a letter (`T`).
 //! - **Main first**: a binary opens with its `main` function.
 
 use crate::{
     report::Violation,
     source::{
-        Container, Function, Source, Visibility, code_part, declares_function, indentation,
-        is_identifier_character, strip_literals,
+        Container, Function, Source, Visibility, code_part, indentation, is_identifier_character,
+        strip_literals,
     },
 };
 
@@ -35,12 +40,6 @@ const ASSERTION_PATTERNS: &[&str] = &[
     "static_assert_size!(",
     ".assert_",
     "unreachable!(",
-];
-
-/// Primitive types of which a function takes at most one argument.
-const PRIMITIVE_TYPES: &[&str] = &[
-    "bool", "char", "f32", "f64", "i8", "i16", "i32", "i64", "i128", "isize", "u8", "u16", "u32",
-    "u64", "u128", "usize",
 ];
 
 /// Functions and assertions counted in the checked code.
@@ -139,17 +138,82 @@ pub(crate) fn check_rules(path: &str, source: &Source<'_>) -> Vec<Violation> {
     violations
 }
 
-/// Reports functions that call themselves.
-fn check_rules_recursion(path: &str, source: &Source<'_>) -> Vec<Violation> {
+/// Reports functions of several statements that hold no assertion. A function that never
+/// returns (`-> !`) is left alone: it is where a failed assertion ends.
+pub(crate) fn check_blind_functions(path: &str, source: &Source<'_>) -> Vec<Violation> {
     let mut violations = Vec::new();
-    for function in source.functions.iter().filter(|function| function.has_body) {
-        let calls_itself =
-            function.body.iter().any(|line| check_rules_recursion_calls(function, line));
-        if calls_itself {
+    let checked = source
+        .functions
+        .iter()
+        .filter(|function| function.has_body)
+        .filter(|function| !function.signature.contains("-> !"));
+    for function in checked {
+        let statement_count = check_blind_functions_statements(source, function);
+        let asserts = function.body.iter().any(|line| count_density_assertions(line) > 0);
+        if statement_count > 1 {
+            if asserts {
+                assert!(!function.body.is_empty(), "an assertion is a line of the body");
+            } else {
+                violations.push(Violation::new(
+                    path,
+                    function.line_index_first,
+                    format!("`{}` has several statements and no assertion", function.name),
+                ));
+            }
+        }
+    }
+    assert!(violations.len() <= source.functions.len(), "one violation per function at most");
+    violations
+}
+
+/// Counts the statements of the body of `function`: the lines at the indentation of the body
+/// that open one, which leaves out comments, attributes and the lines that close a block.
+fn check_blind_functions_statements(source: &Source<'_>, function: &Function<'_>) -> usize {
+    let declaration = source.lines.get(function.line_index_first).map_or("", |line| *line);
+    let body_width = indentation(declaration) + 4;
+    let statement_count = function
+        .body
+        .iter()
+        .filter(|line| !line.trim().is_empty())
+        .filter(|line| indentation(line) == body_width)
+        .filter(|line| !line.trim_start().starts_with(['}', ')', ']', '#', '/']))
+        .count();
+    assert!(statement_count <= function.body.len(), "a statement takes at least one line");
+    statement_count
+}
+
+/// A possible call from one function of a file to another.
+#[derive(Clone, Copy)]
+struct Call<'source, 'text> {
+    /// The function whose body is searched.
+    caller: &'source Function<'text>,
+    /// The function whose name is searched for.
+    callee: &'source Function<'text>,
+}
+
+/// Reports functions that call themselves, directly or through other functions of the file.
+fn check_rules_recursion(path: &str, source: &Source<'_>) -> Vec<Violation> {
+    let functions = &source.functions;
+    // `calls[caller][callee]` holds if the body of `caller` names `callee`.
+    let calls: Vec<Vec<bool>> = functions
+        .iter()
+        .map(|caller| {
+            functions
+                .iter()
+                .map(|callee| check_rules_recursion_calls(Call { caller, callee }))
+                .collect()
+        })
+        .collect();
+    let reaches = check_rules_recursion_closure(&calls);
+    let mut violations = Vec::new();
+    for (index, function) in functions.iter().enumerate() {
+        if reaches[index][index] {
+            let how =
+                if calls[index][index] { "calls itself" } else { "calls itself through others" };
             violations.push(Violation::new(
                 path,
                 function.line_index_first,
-                format!("`{}` calls itself: use a loop over an explicit stack", function.name),
+                format!("`{}` {how}: use a loop over an explicit stack", function.name),
             ));
         }
     }
@@ -158,36 +222,77 @@ fn check_rules_recursion(path: &str, source: &Source<'_>) -> Vec<Violation> {
     violations
 }
 
-/// Returns `true` if `line` calls `function` by name.
-fn check_rules_recursion_calls(function: &Function<'_>, line: &str) -> bool {
-    assert!(function.has_body, "only a body can call");
-    let code = code_part(line);
-    let calls = match function.container {
-        Container::Module => {
-            let call = format!("{}(", function.name);
-            occurrences(code, &call).any(|offset| {
-                let before = code.get(..offset).map_or("", |prefix| prefix);
-                let qualified = before.ends_with('.') || before.ends_with("::");
-                !qualified
-            })
+/// Returns `true` if the body of `call.caller` calls `call.callee` by name.
+fn check_rules_recursion_calls(call: Call<'_, '_>) -> bool {
+    let Call { caller, callee } = call;
+    assert!(!callee.name.is_empty(), "a function has a name");
+    let plain = format!("{}(", callee.name);
+    let method = format!("self.{}(", callee.name);
+    let associated = format!("Self::{}(", callee.name);
+    let qualified = format!("{}::{}(", callee.owner, callee.name);
+    let same_owner = caller.owner == callee.owner;
+    let calls = caller.body.iter().any(|line| {
+        let code = code_part(line);
+        match callee.container {
+            Container::Module => {
+                occurrences(&Search { haystack: code, needle: &plain }).any(|offset| {
+                    let before = code.get(..offset).map_or("", |prefix| prefix);
+                    // A name after `.` or `::` is a method or a path, not this free function.
+                    !before.ends_with(['.', ':'])
+                })
+            }
+            Container::Inherent | Container::Trait => {
+                let on_self =
+                    [&method, &associated].iter().any(|pattern| code.contains(pattern.as_str()));
+                let through_self = if same_owner { on_self } else { false };
+                let through_path = if callee.owner.is_empty() {
+                    false
+                } else {
+                    occurrences(&Search { haystack: code, needle: &qualified }).next().is_some()
+                };
+                if through_self { true } else { through_path }
+            }
         }
-        Container::Inherent | Container::Trait => {
-            let method = format!("self.{}(", function.name);
-            let associated = format!("Self::{}(", function.name);
-            code.contains(&method) || code.contains(&associated)
-        }
-    };
+    });
     if calls {
-        assert!(code.contains(function.name), "a call names the function");
+        assert!(caller.has_body, "only a body can call");
     }
     calls
 }
 
-/// Returns the offsets of `needle` in `haystack` where it starts a whole identifier.
-fn occurrences<'haystack>(
+/// Returns, for every pair of functions, whether the first reaches the second through a chain
+/// of one or more calls: the transitive closure of `calls`, by Warshall's algorithm.
+fn check_rules_recursion_closure(calls: &[Vec<bool>]) -> Vec<Vec<bool>> {
+    let function_count = calls.len();
+    assert!(calls.iter().all(|row| row.len() == function_count), "a square table");
+    let mut reaches = calls.to_vec();
+    for through in 0..function_count {
+        let onward = reaches[through].clone();
+        for row in reaches.iter_mut().filter(|row| row[through]) {
+            for (reached, continues) in row.iter_mut().zip(&onward) {
+                *reached |= *continues;
+            }
+        }
+    }
+    let kept = calls.iter().zip(&reaches).all(|(direct, closed)| {
+        direct.iter().zip(closed).all(|(called, reached)| *reached >= *called)
+    });
+    assert!(kept, "a direct call is a chain of one call");
+    reaches
+}
+
+/// A text to search for in another.
+#[derive(Clone, Copy)]
+struct Search<'haystack> {
+    /// The text searched.
     haystack: &'haystack str,
+    /// The text searched for, which starts with an identifier.
     needle: &'haystack str,
-) -> impl Iterator<Item = usize> + 'haystack {
+}
+
+/// Returns the offsets of the needle in the haystack where it starts a whole identifier.
+fn occurrences<'haystack>(search: &Search<'haystack>) -> impl Iterator<Item = usize> + 'haystack {
+    let Search { haystack, needle } = *search;
     assert!(!needle.is_empty(), "an empty needle matches everywhere");
     let first = needle.chars().next().is_some_and(is_identifier_character);
     assert!(first, "a needle starts with an identifier");
@@ -197,13 +302,14 @@ fn occurrences<'haystack>(
     })
 }
 
-/// Reports `while`, `loop` and `if !` on every code line, tests included.
+/// Reports `while`, `loop`, `if !`, compound conditions and one-letter type parameters on every
+/// code line, tests included.
 fn check_rules_lines(path: &str, source: &Source<'_>) -> Vec<Violation> {
     let mut violations = Vec::new();
     for (line_index, line) in source.lines.iter().enumerate() {
         let code = strip_literals(code_part(line));
         let words = check_rules_lines_words(&code);
-        let unbounded = words.contains(&"while") || words.contains(&"loop");
+        let unbounded = words.iter().any(|word| matches!(*word, "while" | "loop"));
         if unbounded {
             violations.push(Violation::new(
                 path,
@@ -218,38 +324,69 @@ fn check_rules_lines(path: &str, source: &Source<'_>) -> Vec<Violation> {
                 "negated condition: state it positively, or swap the branches".to_owned(),
             ));
         }
-        if let Some(message) = check_rules_lines_compound(&code) {
-            violations.push(Violation::new(path, line_index, message.to_owned()));
+        if check_rules_lines_compound(&code) {
+            violations.push(Violation::new(
+                path,
+                line_index,
+                "compound condition: no `&&` or `||`, nest `if`s or match on the cases".to_owned(),
+            ));
+        }
+        if check_rules_lines_letter(&code) {
+            violations.push(Violation::new(
+                path,
+                line_index,
+                "one-letter type parameter: name it with a word, like `Item`".to_owned(),
+            ));
         }
     }
-    assert!(violations.len() <= source.lines.len() * 3, "three rules per line at most");
+    assert!(violations.len() <= source.lines.len() * 4, "four rules per line at most");
     assert!(violations.iter().all(|violation| violation.path == path), "one file at a time");
     violations
 }
 
-/// Returns why `code` breaks the rule on compound conditions, if it does: an `if` that joins
-/// conditions with `&&` or `||`, or an assertion that joins them with `&&`.
-fn check_rules_lines_compound(code: &str) -> Option<&'static str> {
+/// Returns `true` if `code` joins conditions: with `&&` or `||` between two operands, or by
+/// asking a list of conditions whether it holds `true` or `false`.
+fn check_rules_lines_compound(code: &str) -> bool {
     assert!(!code.contains('\n'), "one line at a time");
-    let joined = code.contains(" && ");
-    let alternative = code.contains(" || ");
-    let words = check_rules_lines_words(code);
-    let condition = words.contains(&"if");
-    let assertion = code.contains("assert!(");
-    let compound = joined || alternative;
-    let message = if condition {
-        compound.then_some("compound condition: split it into nested `if`s")
-    } else {
-        if assertion {
-            joined.then_some("compound assertion: one condition per assertion")
-        } else {
-            None
-        }
+    let joins = |operator: &str| {
+        code.match_indices(operator).any(|(offset, _)| {
+            let before = code.get(..offset).map_or("", |before| before).trim_end();
+            // An operator follows an operand. The `||` of a closure without parameters follows
+            // `(`, `,`, `=` or `move`, and the `&&` of a double reference follows `:`, `<` or `(`.
+            let after_name = before.chars().next_back().is_some_and(is_identifier_character);
+            let after_operand =
+                if after_name { true } else { before.ends_with([')', ']', '}', '"', '\'']) };
+            let after_keyword = ["move", "return", "as", "in"].iter().any(|keyword| {
+                occurrences(&Search { haystack: before, needle: keyword })
+                    .any(|start| start + keyword.len() == before.len())
+            });
+            if after_operand { !after_keyword } else { false }
+        })
     };
-    if message.is_some() {
-        assert!(joined || alternative, "only a joined condition is compound");
+    let listed = ["contains(&true)", "contains(&false)"].iter().any(|list| code.contains(list));
+    let compound = if joins("&&") { true } else { if joins("||") { true } else { listed } };
+    if compound {
+        assert!(!code.trim().is_empty(), "a compound condition is code");
     }
-    message
+    compound
+}
+
+/// Returns `true` if `code` uses a single capital letter as an identifier, which only a type
+/// parameter does: constants and types have longer names.
+fn check_rules_lines_letter(code: &str) -> bool {
+    assert!(!code.contains('\n'), "one line at a time");
+    let characters: Vec<char> = format!(" {code} ").chars().collect();
+    // A letter between quotes is a character literal, and one after a quote is a lifetime.
+    let joins =
+        |character: &char| matches!(*character, 'a'..='z' | 'A'..='Z' | '0'..='9' | '_' | '\'');
+    let found = characters.windows(3).any(|window| match window {
+        [before, 'A'..='Z', after] => [before, after].iter().all(|neighbor| !joins(neighbor)),
+        _ => false,
+    });
+    if found {
+        assert!(code.chars().any(|character| character.is_ascii_uppercase()), "a capital letter");
+    }
+    found
 }
 
 /// Returns the identifiers and keywords of `code`.
@@ -291,30 +428,34 @@ fn check_rules_test_descriptions(path: &str, source: &Source<'_>) -> Vec<Violati
 /// Reports private helpers called from a single function and not named after it.
 fn check_rules_helper_names(path: &str, source: &Source<'_>) -> Vec<Violation> {
     let mut violations = Vec::new();
-    let helpers = source.functions.iter().filter(|function| {
-        let private = function.visibility == Visibility::Private;
-        private && function.container != Container::Trait && function.name != "main"
+    let helpers = source
+        .functions
+        .iter()
+        .filter(|function| function.visibility == Visibility::Private)
+        .filter(|function| function.container != Container::Trait)
+        .filter(|function| function.name != "main");
+    let called_once = helpers.filter_map(|helper| {
+        check_rules_helper_names_caller(source, helper).map(|caller| (helper, caller))
     });
-    for helper in helpers {
-        if let Some(caller) = check_rules_helper_names_caller(source, helper) {
-            let prefix = format!("{}_", caller.name);
-            // A helper of a method may lead with the type's name too: `source_new_blocks`.
-            let qualified = caller.container == Container::Inherent &&
-                helper.name.contains(&format!("_{prefix}"));
-            let prefixed = helper.name.starts_with(&prefix);
-            let named = prefixed || qualified;
-            if named {
+    for (helper, caller) in called_once {
+        let prefix = format!("{}_", caller.name);
+        // A helper of a method may lead with the type's name too: `source_new_blocks`.
+        let qualified = match caller.container {
+            Container::Inherent => helper.name.contains(&format!("_{prefix}")),
+            Container::Module | Container::Trait => false,
+        };
+        if helper.name.starts_with(&prefix) {
+            assert!(helper.name.len() > prefix.len(), "a helper adds to its caller's name");
+        } else {
+            if qualified {
                 assert!(helper.name.len() > prefix.len(), "a helper adds to its caller's name");
             } else {
                 assert!(caller.name != helper.name, "a helper is not its own caller");
-                violations.push(Violation::new(
-                    path,
-                    helper.line_index_first,
-                    format!(
-                        "`{}` is only called by `{}`: name it `{prefix}..`",
-                        helper.name, caller.name
-                    ),
-                ));
+                let message = format!(
+                    "`{}` is only called by `{}`: name it `{prefix}..`",
+                    helper.name, caller.name
+                );
+                violations.push(Violation::new(path, helper.line_index_first, message));
             }
         }
     }
@@ -330,7 +471,8 @@ fn check_rules_helper_names_caller<'source, 'text>(
     let mut caller: Option<&Function<'text>> = None;
     for (line_index, line) in source.code().iter().enumerate() {
         let declaration = line_index == helper.line_index_first;
-        let uses = occurrences(code_part(line), helper.name).any(|offset| {
+        let search = Search { haystack: code_part(line), needle: helper.name };
+        let uses = occurrences(&search).any(|offset| {
             let after = code_part(line).get(offset + helper.name.len()..).map_or("", |rest| rest);
             after.chars().next().is_none_or(|character| !is_identifier_character(character))
         });
@@ -351,22 +493,22 @@ fn check_rules_helper_names_caller<'source, 'text>(
     if is_helper { None } else { Some(caller_found) }
 }
 
-/// Reports functions with two arguments of one primitive type, or an `Option` argument.
+/// Reports functions with two arguments of one type, or an `Option` argument.
 fn check_rules_parameters(path: &str, source: &Source<'_>) -> Vec<Violation> {
     let mut violations = Vec::new();
     let checked = source.functions.iter().filter(|function| function.container != Container::Trait);
     for function in checked {
         let types = check_rules_parameters_types(&function.signature);
         assert!(types.len() <= function.signature.len(), "a type takes at least one byte");
-        let repeated = PRIMITIVE_TYPES.iter().find(|primitive| {
-            let count = types.iter().filter(|parameter| parameter == primitive).count();
-            count >= 2
-        });
-        if let Some(primitive) = repeated {
+        let repeated = types
+            .iter()
+            .enumerate()
+            .find(|&(position, kind)| types.iter().skip(position + 1).any(|other| other == kind));
+        if let Some((_, kind)) = repeated {
             violations.push(Violation::new(
                 path,
                 function.line_index_first,
-                format!("`{}` takes two `{primitive}`: pass them in a struct", function.name),
+                format!("`{}` takes two `{kind}`: pass them in a struct", function.name),
             ));
         }
         if types.iter().any(|parameter| parameter.starts_with("Option<")) {
@@ -460,17 +602,23 @@ fn check_rules_main_first(path: &str, source: &Source<'_>) -> Vec<Violation> {
     let has_main = source
         .functions
         .iter()
-        .any(|function| function.name == "main" && function.container == Container::Module);
+        .filter(|function| function.container == Container::Module)
+        .any(|function| function.name == "main");
     if has_main {
-        let first_item = source.code().iter().enumerate().find(|&(_, line)| {
-            let top_level = indentation(line) == 0 && !line.trim().is_empty();
+        let top_level = source
+            .code()
+            .iter()
+            .enumerate()
+            .filter(|&(_, line)| indentation(line) == 0)
+            .filter(|&(_, line)| !line.trim().is_empty());
+        let first_item = top_level.into_iter().find(|&(_, line)| {
             let preamble = ["//", "#", "use ", "mod ", "pub mod ", "pub use ", "}", ")", "    "]
                 .iter()
                 .any(|prefix| line.starts_with(prefix));
-            top_level && !preamble
+            !preamble
         });
         if let Some((line_index, line)) = first_item {
-            let main_first = declares_function(line) && line.contains("fn main(");
+            let main_first = line.starts_with("fn main(");
             if main_first {
                 assert!(line_index < source.code_line_count, "`main` is in the code");
             } else {
@@ -542,15 +690,82 @@ mod tests {
         assert!(messages("fn text() {\n    say(\"while\"); // loop\n}\n").is_empty());
     }
 
-    /// Flags an `if` that joins conditions and an assertion that joins them with `&&`, and accepts
-    /// a named compound condition and an assertion with an alternative.
+    /// Returns the messages in `text` that contain `fragment`.
+    fn messages_about(text: &str, fragment: &str) -> Vec<String> {
+        messages(text).into_iter().filter(|message| message.contains(fragment)).collect()
+    }
+
+    /// Flags two free functions that call each other and two methods of one type that do, in
+    /// separate `impl` blocks, and leaves alone methods of two types that share their names.
+    #[test]
+    fn recursion_through_other_functions_is_reported() {
+        let free = "fn ping() {\n    pong();\n}\nfn pong() {\n    ping();\n}\n";
+        assert_eq!(messages_about(free, "calls itself through others").len(), 2);
+        let methods = concat!(
+            "impl Tree {\n    fn len(&self) -> u32 {\n        self.count()\n    }\n}\n",
+            "impl Tree {\n    fn count(&self) -> u32 {\n        self.len()\n    }\n}\n",
+        );
+        assert_eq!(messages_about(methods, "calls itself through others").len(), 2);
+        let types = concat!(
+            "impl Tree {\n    fn len(&self) -> u32 {\n        self.count()\n    }\n}\n",
+            "impl Leaf {\n    fn count(&self) -> u32 {\n        self.len()\n    }\n}\n",
+        );
+        assert!(messages_about(types, "calls itself").is_empty(), "two types, no cycle");
+        let chain = "fn first() {\n    second();\n}\nfn second() {}\n";
+        assert!(messages_about(chain, "calls itself").is_empty(), "a chain is not a cycle");
+    }
+
+    /// Flags `&&` and `||` wherever they join conditions (an `if`, an assertion, a value, a
+    /// wrapped line) and a list of conditions searched for `true`, and accepts what only looks
+    /// like them: a closure without parameters and a reference to a reference.
     #[test]
     fn compound_conditions_are_reported() {
         assert_eq!(messages("fn check() {\n    if ready && open {}\n}\n").len(), 1);
         assert_eq!(messages("fn check() {\n    if ready || open {}\n}\n").len(), 1);
+        let wrapped_condition = "fn check() {\n    if ready &&\n        open\n    {}\n}\n";
+        assert_eq!(messages(wrapped_condition).len(), 1);
         assert_eq!(messages("fn check() {\n    assert!(ready && open, \"x\");\n}\n").len(), 1);
-        assert!(messages("fn check() {\n    let both = ready && open;\n}\n").is_empty());
-        assert!(messages("fn check() {\n    assert!(ready || open, \"x\");\n}\n").is_empty());
+        assert_eq!(messages("fn check() {\n    assert!(ready || open, \"x\");\n}\n").len(), 1);
+        assert_eq!(messages("fn check() {\n    let both = ready && open;\n}\n").len(), 1);
+        let listed = "fn check() {\n    let either = [ready, open].contains(&true);\n}\n";
+        assert_eq!(messages(listed).len(), 1);
+        let closures = "fn check() {\n    run(|| ready());\n    spawn(move || open());\n}\n";
+        assert!(messages(closures).is_empty(), "a closure without parameters");
+        assert!(messages("fn check(byte: &&u8) {}\n").is_empty(), "a double reference");
+        let nested = "fn check() {\n    if ready {\n        if open {}\n    }\n}\n";
+        assert!(messages(nested).is_empty(), "nested conditions");
+    }
+
+    /// Flags a function of two statements without an assertion, and accepts the same function
+    /// once it asserts, a function that is a single expression over several lines, and a
+    /// function that never returns.
+    #[test]
+    fn functions_of_several_statements_assert() {
+        let blind = "fn area(side: u32) -> u32 {\n    let area = side * side;\n    area\n}\n";
+        let reported = check_blind_functions("test.rs", &Source::new(blind));
+        assert_eq!(reported.len(), 1);
+        assert!(reported[0].message.contains("several statements and no assertion"));
+        let checked = concat!(
+            "fn area(side: u32) -> u32 {\n    assert!(side > 0, \"x\");\n",
+            "    let area = side * side;\n    area\n}\n",
+        );
+        assert!(check_blind_functions("test.rs", &Source::new(checked)).is_empty());
+        let expression = concat!(
+            "fn pick(side: bool) -> u32 {\n    match side {\n        true => 1,\n",
+            "        false => 2,\n    }\n}\n",
+        );
+        assert!(check_blind_functions("test.rs", &Source::new(expression)).is_empty());
+        let diverging = "fn stop(code: i32) -> ! {\n    let status = code;\n    exit(status)\n}\n";
+        assert!(check_blind_functions("test.rs", &Source::new(diverging)).is_empty());
+    }
+
+    /// Flags a one-letter type parameter, and accepts a word and a character literal.
+    #[test]
+    fn one_letter_type_parameters_are_reported() {
+        assert_eq!(messages("pub fn first<T>(items: &[T]) {}\n").len(), 1);
+        assert!(messages("pub fn first<Item>(items: &[Item]) {}\n").is_empty());
+        assert!(messages("pub fn letter() -> char {\n    'T'\n}\n").is_empty());
+        assert!(messages("pub fn borrow<'a>(text: &'a str) {}\n").is_empty());
     }
 
     /// Accepts a test with a doc comment above its attributes and flags one without.
@@ -575,13 +790,15 @@ mod tests {
         assert!(messages(shared).is_empty());
     }
 
-    /// Flags two arguments of one primitive type and an `Option` argument, and accepts two
-    /// arguments of different types.
+    /// Flags two arguments of one type, primitive or not, and an `Option` argument, and accepts
+    /// two arguments of different types.
     #[test]
     fn parameters_that_can_be_mixed_up_are_reported() {
         assert_eq!(messages("pub fn span(low: u32, high: u32) {}\n").len(), 1);
         assert_eq!(messages("pub fn pick(choice: Option<u8>) {}\n").len(), 1);
-        assert!(messages("pub fn fill<F: Fn(u8) -> u8>(count: u32, fill: F) {}\n").is_empty());
+        assert_eq!(messages("pub fn copy(source: &Path, target: &Path) {}\n").len(), 1);
+        let distinct = "pub fn fill<Fill: Fn(u8) -> u8>(count: u32, fill: Fill) {}\n";
+        assert!(messages(distinct).is_empty());
     }
 
     /// Flags a binary that declares a constant before `main`, and accepts one that opens with it.

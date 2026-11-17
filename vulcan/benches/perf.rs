@@ -18,14 +18,14 @@
 extern crate alloc;
 
 use alloc::collections::BTreeMap;
-use core::{hint::black_box, str};
+use core::{hint::black_box, num::NonZeroU32, str};
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use vulcan::{
     arena::{Bump, BumpExtension as _},
-    bytes::{Cursor, StaticFinder, is_id_continue, is_whitespace},
+    bytes::{Cursor, StaticFinder, is_identifier_continue, is_whitespace},
     division::Divide as _,
     intern::Interner,
-    sync::{Parallelism, par_try_map},
+    sync::{PARALLEL_LEN_MIN, PoolConfig, ThreadCount, Work, WorkerPool},
 };
 
 /// A synthetic source mixing identifiers, whitespace and block comments.
@@ -57,7 +57,7 @@ fn bench_scan_count_identifiers(input: &[u8]) -> u32 {
         if cursor.eat_prefix(b"/*") {
             cursor.skip_past_finder(BLOCK_END.get());
         } else {
-            if cursor.eat_while(is_id_continue).is_empty() {
+            if cursor.eat_while(is_identifier_continue).is_empty() {
                 cursor.bump();
             } else {
                 identifier_count += 1;
@@ -79,7 +79,9 @@ fn bench_scan(criterion: &mut Criterion) {
         bencher.iter(|| {
             let text = str::from_utf8(black_box(&input)).map_or("", |text| text);
             text.split_whitespace()
-                .filter(|word| word.chars().all(|letter| letter.is_alphanumeric() || letter == '_'))
+                .filter(|word| {
+                    word.chars().filter(|letter| *letter != '_').all(char::is_alphanumeric)
+                })
                 .count()
         });
     });
@@ -144,22 +146,42 @@ fn bench_alloc(criterion: &mut Criterion) {
     group.finish();
 }
 
-/// Compares the serial and the parallel paths of `par_try_map`.
-fn bench_par(criterion: &mut Criterion) {
-    let items: Vec<u64> = (0..256).collect();
-    let work = |seed: u64| {
-        Ok::<_, ()>((0..2_000_u64).fold(seed, |state, step| state.wrapping_mul(31) ^ step))
-    };
-    let mut group = criterion.benchmark_group("par_try_map");
-    for (name, parallelism) in
-        [("serial", Parallelism::Serial), ("parallel", Parallelism::Parallel)]
+/// Mixes a seed for 2 000 rounds: enough work per item for a pool to pay off.
+#[expect(clippy::trivially_copy_pass_by_ref, reason = "the signature of a pool function")]
+fn bench_pool_mix(_context: &(), seed: u64) -> u64 {
+    (0..2_000_u64).fold(seed, |state, step| state.wrapping_mul(31) ^ step)
+}
+
+/// Compares a `WorkerPool` of one thread, which maps inline, with one that uses every core. The
+/// buffers are allocated once and reused by every iteration, as in a sealed program.
+fn bench_pool(criterion: &mut Criterion) {
+    let mut group = criterion.benchmark_group("worker_pool_map");
+    for (name, thread_count) in
+        [("serial", ThreadCount::Fixed(NonZeroU32::MIN)), ("parallel", ThreadCount::Available)]
     {
+        let config = PoolConfig {
+            thread_count,
+            stack_size_bytes: 2 * 1024 * 1024,
+            name_prefix: "bench",
+            batch_item_count_max: 256,
+            parallel_item_count_min: PARALLEL_LEN_MIN,
+        };
+        let work = Work { context: (), map: bench_pool_mix, start_handler: None };
+        let Ok(mut pool) = WorkerPool::new(&config, work) else {
+            continue;
+        };
+        let mut items = Vec::with_capacity(256);
+        let mut outputs = Vec::with_capacity(256);
         group.bench_function(name, |bencher| {
-            bencher.iter(|| par_try_map(parallelism, black_box(items.clone()), work));
+            bencher.iter(|| {
+                items.extend(0..256_u64);
+                pool.map(black_box(&mut items), &mut outputs);
+                outputs.clear();
+            });
         });
     }
     group.finish();
 }
 
-criterion_group!(benches, bench_scan, bench_intern, bench_alloc, bench_par);
+criterion_group!(benches, bench_scan, bench_intern, bench_alloc, bench_pool);
 criterion_main!(benches);
