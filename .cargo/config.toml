@@ -1,5 +1,7 @@
 [alias]
 docs = "doc --workspace --all-features --no-deps"
+# Project automation, written in Rust so it runs the same on every platform: `cargo xtask help`.
+xtask = "run --package xtask --quiet --"
 
 [target.x86_64-pc-windows-msvc]
 rustflags = ["-Clink-arg=/STACK:10000000"]

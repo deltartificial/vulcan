@@ -12,8 +12,57 @@ libfuzzer-sys = "0.4"
 vulcan = { path = "../vulcan" }
 
 [[bin]]
+name = "bit_set"
+path = "fuzz_targets/bit_set.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "bounded"
+path = "fuzz_targets/bounded.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "cache"
+path = "fuzz_targets/cache.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
 name = "cursor"
 path = "fuzz_targets/cursor.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "intern"
+path = "fuzz_targets/intern.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "division"
+path = "fuzz_targets/division.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "sharded_map"
+path = "fuzz_targets/sharded_map.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "index_vec"
+path = "fuzz_targets/index_vec.rs"
 test = false
 doc = false
 bench = false

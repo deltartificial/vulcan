@@ -5,8 +5,8 @@
 //! `BreakValue` pays nothing for the early-exit plumbing it does not use.
 //!
 //! ```
-//! use std::ops::ControlFlow;
-//! use vulcan::never::{IntoOk, Never, UnwrapInfallible};
+//! use core::ops::ControlFlow;
+//! use vulcan::never::{IntoOk as _, Never, UnwrapInfallible as _};
 //!
 //! fn sum(values: &[u32]) -> ControlFlow<Never, u32> {
 //!     ControlFlow::Continue(values.iter().sum())
@@ -17,6 +17,9 @@
 //! assert_eq!(parsed.into_ok(), 7);
 //! ```
 
+use crate::static_assert_size;
+use core::ops::ControlFlow;
+
 /// Names the return type of a function pointer, which is how `!` can be spelled on stable.
 #[doc(hidden)]
 pub trait FnReturn {
@@ -24,12 +27,19 @@ pub trait FnReturn {
     type Output;
 }
 
-impl<T> FnReturn for fn() -> T {
-    type Output = T;
+impl<Return> FnReturn for fn() -> Return {
+    type Output = Return;
 }
 
 /// The [`!`](primitive@never) type, usable on stable Rust.
 pub type Never = <fn() -> ! as FnReturn>::Output;
+
+// The promise of this module, checked at compile time: an uninhabited failure variant takes no
+// space, so a container that cannot fail is exactly as large as its value.
+static_assert_size!(Never, 0);
+static_assert_size!(Result<u32, Never>, 4);
+static_assert_size!(ControlFlow<Never, u32>, 4);
+static_assert_size!(Result<(), Never>, 0);
 
 /// Extracts the value of a container whose failure case is uninhabited.
 pub trait UnwrapInfallible {
@@ -40,11 +50,15 @@ pub trait UnwrapInfallible {
     fn into_value(self) -> Self::Value;
 }
 
-impl<T> UnwrapInfallible for std::ops::ControlFlow<Never, T> {
-    type Value = T;
+impl<Value> UnwrapInfallible for ControlFlow<Never, Value> {
+    type Value = Value;
 
+    #[expect(
+        clippy::inline_always,
+        reason = "a match on an uninhabited variant compiles to nothing"
+    )]
     #[inline(always)]
-    fn into_value(self) -> T {
+    fn into_value(self) -> Value {
         match self {
             Self::Continue(value) => value,
             Self::Break(never) => never,
@@ -53,14 +67,18 @@ impl<T> UnwrapInfallible for std::ops::ControlFlow<Never, T> {
 }
 
 /// Extension for `Result<T, Never>`, named like the unstable `Result::into_ok`.
-pub trait IntoOk<T> {
+pub trait IntoOk<Value> {
     /// Returns the `Ok` value. Never panics: the `Err` variant cannot exist.
-    fn into_ok(self) -> T;
+    fn into_ok(self) -> Value;
 }
 
-impl<T> IntoOk<T> for Result<T, Never> {
+impl<Value> IntoOk<Value> for Result<Value, Never> {
+    #[expect(
+        clippy::inline_always,
+        reason = "a match on an uninhabited variant compiles to nothing"
+    )]
     #[inline(always)]
-    fn into_ok(self) -> T {
+    fn into_ok(self) -> Value {
         match self {
             Ok(value) => value,
             Err(never) => never,
@@ -72,10 +90,16 @@ impl<T> IntoOk<T> for Result<T, Never> {
 mod tests {
     use super::*;
 
+    /// Checks that both helpers return the wrapped value unchanged, at the bounds of `u32` and
+    /// for a zero-sized value, by unwrapping containers built from known values.
     #[test]
-    fn never_is_zero_sized_and_free() {
-        assert_eq!(size_of::<Never>(), 0);
-        assert_eq!(size_of::<Result<u32, Never>>(), 4);
-        assert_eq!(Ok::<_, Never>(3).into_ok(), 3);
+    fn helpers_return_the_value() {
+        for value in [0_u32, 1, u32::MAX] {
+            assert_eq!(IntoOk::into_ok(Ok::<_, Never>(value)), value, "`into_ok` keeps the value");
+            let flow = ControlFlow::<Never, u32>::Continue(value);
+            assert_eq!(flow.into_value(), value, "`into_value` keeps the value");
+        }
+        let unit: () = IntoOk::into_ok(Ok::<(), Never>(()));
+        assert_eq!(unit, (), "a zero-sized value unwraps too");
     }
 }

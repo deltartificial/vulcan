@@ -1,133 +1,213 @@
-# ==============================================================================
-# STACK AND MEMORY THRESHOLDS
-# ==============================================================================
+# Thresholds on stack and memory use.
 
-# Limit large types on the stack (bytes)
+# Values above 16 bytes are passed by reference: a by-value copy of a large struct is a silent
+# `memcpy` on every call. Values of 16 bytes or less are passed by value, in registers.
+pass-by-value-size-limit = 16
+trivial-copy-size-limit = 16
+
+# Boxed locals above this size are flagged: they belong on the stack or in an arena.
 too-large-for-stack = 128
 
-# Force pass-by-reference for types larger than 128 bytes
-pass-by-value-size-limit = 128
-
-# Force explicit Copy bound for generic types with size > 32 bytes
-trivial-copy-size-limit = 32
-
-# Prevent huge stack arrays (warn for arrays > 8KB)
+# Stack arrays above 8 KiB are flagged.
 array-size-threshold = 8192
 
-# ==============================================================================
-# COMPLEXITY THRESHOLDS (Force simpler code)
-# ==============================================================================
+# A stack frame above 64 KiB is flagged, so deep call chains cannot overflow the stack by surprise.
+stack-size-threshold = 65536
 
-# Force simpler function logic (default: 25, Vulcan: 15)
+# Thresholds that force simpler code.
+
+# Simpler function logic (default: 25).
 cognitive-complexity-threshold = 15
 
-# Force simpler type signatures (default: 250, Vulcan: 100)
+# Simpler type signatures (default: 250).
 type-complexity-threshold = 100
 
-# Force fewer function parameters (default: 7, Vulcan: 5)
+# Few parameters: arguments that can be mixed up go in an options struct (default: 7).
 too-many-arguments-threshold = 5
 
-# Force shorter functions (default: 100, Vulcan: 75)
-too-many-lines-threshold = 75
+# A function fits on one screen: 70 lines at most (default: 100).
+too-many-lines-threshold = 70
 
-# ==============================================================================
-# NAMING RESTRICTIONS
-# ==============================================================================
+# At most four levels of nested blocks inside a function (disabled by default).
+excessive-nesting-threshold = 4
 
-# Reject 1-char identifiers (except common loop/math vars)
-min-ident-chars-threshold = 2
-allowed-idents-below-min-chars = ["i", "j", "k", "x", "y", "z", "w", "h", "n", "m", "_"]
+# Three `bool` parameters are three chances to swap them; use an enum (default: 3).
+max-fn-params-bools = 1
 
-# ==============================================================================
-# TEST ALLOWANCES
-# ==============================================================================
+# Restrictions on names.
 
-# Allow dbg! macro in test code
+# No single-letter names, except `i`, `j` and `k` for loop counters over integers.
+min-ident-chars-threshold = 1
+allowed-idents-below-min-chars = ["i", "j", "k"]
+
+# Trait methods keep their parameter names, except where the standard library uses a single
+# letter (`fmt(&self, f)`), which `min_ident_chars` forbids.
+allow-renamed-params-for = ["..", "core::fmt::Debug", "core::fmt::Display"]
+
+# Placeholder and abbreviated names that hide what a value is.
+disallowed-names = [
+    "acc",
+    "arg",
+    "args",
+    "arr",
+    "bar",
+    "baz",
+    "buf",
+    "cfg",
+    "cnt",
+    "ctx",
+    "cur",
+    "curr",
+    "dest",
+    "dst",
+    "elem",
+    "err",
+    "foo",
+    "hi",
+    "idx",
+    "iter",
+    "len",
+    "lo",
+    "msg",
+    "num",
+    "opt",
+    "pos",
+    "prev",
+    "ptr",
+    "quux",
+    "res",
+    "ret",
+    "src",
+    "str",
+    "temp",
+    "tmp",
+    "val",
+    "vec",
+]
+
+# What tests may do that other code may not.
+
+# Tests may unwrap, expect and panic: a failing test is the desired outcome. Library code may not.
 allow-dbg-in-tests = true
-
-# Allow unwrap/expect/panic in tests (but NOT in src/)
 allow-unwrap-in-tests = true
 allow-expect-in-tests = true
 allow-panic-in-tests = true
 
-# ==============================================================================
-# DOCUMENTATION
-# ==============================================================================
+# Documentation checks.
 
-# Valid identifiers for doc_markdown lint
+# Valid identifiers for the `doc_markdown` lint.
 doc-valid-idents = [
-  "P2P",
-  "IPv4",
-  "IPv6",
-  "KiB",
-  "MiB",
-  "GiB",
-  "TiB",
-  "WebSocket",
-  "WebSockets",
-  "MessagePack",
-  "EVM",
-  "CodSpeed",
+    "P2P",
+    "IPv4",
+    "IPv6",
+    "KiB",
+    "MiB",
+    "GiB",
+    "TiB",
+    "WebSocket",
+    "WebSockets",
+    "MessagePack",
+    "EVM",
+    "CodSpeed",
 ]
 
-# ==============================================================================
-# SEMVER AND BREAKING CHANGES
-# ==============================================================================
+# Compatibility and consistency checks.
 
-# Allow breaking exported API during development
+# Allow breaking exported API during development.
 avoid-breaking-exported-api = false
 
-# Enforce consistent struct field initialization order
+# Enforce consistent struct field initialization order.
 check-inconsistent-struct-field-initializers = true
 
-# Flag commented-out code
+# Flag commented-out code.
 lint-commented-code = true
 
-# ==============================================================================
-# INTERIOR MUTABILITY
-# ==============================================================================
+# Interior mutability.
 
-# Types with interior mutability to ignore
+# Types with interior mutability to ignore.
 ignore-interior-mutability = ["bytes::Bytes"]
 
-# ==============================================================================
-# DISALLOWED MACROS
-# ==============================================================================
+# Banned macros.
 
-# Disallow direct print macros — enforce tracing usage
+# Library code logs through `tracing`. Assertions stay on in release builds: a check that only
+# runs in debug builds misses the bugs that only production inputs trigger.
 disallowed-macros = [
-  { path = "std::print", reason = "use `tracing` macros instead" },
-  { path = "std::eprint", reason = "use `tracing` macros instead" },
-  { path = "std::println", reason = "use `tracing` macros instead" },
-  { path = "std::eprintln", reason = "use `tracing` macros instead" },
+    { path = "std::print", reason = "use `tracing` macros instead" },
+    { path = "std::eprint", reason = "use `tracing` macros instead" },
+    { path = "std::println", reason = "use `tracing` macros instead" },
+    { path = "std::eprintln", reason = "use `tracing` macros instead" },
+    { path = "std::debug_assert", reason = "use `assert!`: assertions run in every build" },
+    { path = "std::debug_assert_eq", reason = "use `assert_eq!`: assertions run in every build" },
+    { path = "std::debug_assert_ne", reason = "use `assert_ne!`: assertions run in every build" },
 ]
 
-# ==============================================================================
-# DISALLOWED TYPES
-# ==============================================================================
+# Banned types, each with what to use instead.
+#
+# Tables instead of inline entries, so no line passes 100 columns.
 
-# Enforce faster alternatives to std collections and sync primitives
-disallowed-types = [
-  # HashMap/HashSet: use faster alternatives
-  { path = "std::collections::HashMap", reason = "use `rustc_hash::FxHashMap` (or `foldhash::HashMap`) for better performance" },
-  { path = "std::collections::HashSet", reason = "use `rustc_hash::FxHashSet` (or `foldhash::HashSet`) for better performance" },
+# Hash collections: a faster hasher.
+[[disallowed-types]]
+path = "std::collections::HashMap"
+reason = "use `rustc_hash::FxHashMap` (or `foldhash::HashMap`): faster on short keys"
 
-  # LinkedList: almost always wrong choice (cache-unfriendly, allocation overhead)
-  { path = "std::collections::LinkedList", reason = "use `Vec` or `VecDeque` instead - LinkedList has poor cache locality and rarely justified" },
+[[disallowed-types]]
+path = "std::collections::HashSet"
+reason = "use `rustc_hash::FxHashSet` (or `foldhash::HashSet`): faster on short keys"
 
-  # Mutex/RwLock: use parking_lot for better performance
-  { path = "std::sync::Mutex", reason = "use `parking_lot::Mutex` for 1.5x better performance and no poisoning" },
-  { path = "std::sync::RwLock", reason = "use `parking_lot::RwLock` for 5x better performance and no poisoning" },
-]
+# A linked list is cache-unfriendly and allocates per node.
+[[disallowed-types]]
+path = "std::collections::LinkedList"
+reason = "use `Vec` or `VecDeque`: a linked list has poor cache locality"
 
-# ==============================================================================
-# DISALLOWED METHODS
-# ==============================================================================
+# Locks: faster, and no poisoning.
+[[disallowed-types]]
+path = "std::sync::Mutex"
+reason = "use `parking_lot::Mutex`: faster, and no poisoning"
 
-# Enforce explicit error handling
-disallowed-methods = [
-  { path = "std::env::var", reason = "use `std::env::var_os` with explicit error handling or a config module" },
-  { path = "std::mem::drop", reason = "use `_ = expr` to explicitly discard a #[must_use] value; use a scope block to drop a guard early" },
-  { path = "core::option::Option::unwrap_or", reason = "use `map_or`, `if let`/`let-else`, or propagate with `?`" },
-  { path = "core::result::Result::unwrap_or", reason = "use `map_or`, `if let`/`let-else`, or propagate with `?`" },
-]
+[[disallowed-types]]
+path = "std::sync::RwLock"
+reason = "use `parking_lot::RwLock`: faster, and no poisoning"
+
+# Banned methods, each with what to use instead.
+
+# Errors are handled explicitly.
+[[disallowed-methods]]
+path = "std::env::var"
+reason = "use `std::env::var_os` with explicit error handling or a config module"
+
+[[disallowed-methods]]
+path = "std::mem::drop"
+reason = "use `_ = expr` to discard a `#[must_use]` value, or a scope block to drop a guard"
+
+# Missing values are handled, not silently replaced.
+[[disallowed-methods]]
+path = "core::option::Option::unwrap_or"
+reason = "use `map_or`, `if let`/`let-else`, or propagate with `?`"
+
+[[disallowed-methods]]
+path = "core::result::Result::unwrap_or"
+reason = "use `map_or`, `if let`/`let-else`, or propagate with `?`"
+
+[[disallowed-methods]]
+path = "core::option::Option::unwrap_or_default"
+reason = "handle the `None` case explicitly: a silent default hides a missing value"
+
+[[disallowed-methods]]
+path = "core::result::Result::unwrap_or_default"
+reason = "handle the error explicitly: a silent default hides a failure"
+
+# Options are passed explicitly: a call that relies on a default changes meaning when the default
+# changes.
+[[disallowed-methods]]
+path = "core::default::Default::default"
+reason = "name every option at the call site; a suggested value is a named constant"
+
+# Every queue has a bound.
+[[disallowed-methods]]
+path = "std::sync::mpsc::channel"
+reason = "unbounded queue: use `std::sync::mpsc::sync_channel` with an explicit capacity"
+
+# The program runs at its own pace and waits on conditions, not on guesses about time.
+[[disallowed-methods]]
+path = "std::thread::sleep"
+reason = "a sleep is a guess about timing: wait on a condition with a bound instead"
