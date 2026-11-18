@@ -53,9 +53,9 @@ Assertions find programmer errors. They are not error handling: an **operating e
 full disk, a refused connection) is expected and must be handled with `Result`; a **failed
 assertion** means the program itself is wrong. The only correct way to handle code that is wrong is
 to crash, so assertions run in every build, release included (`debug_assert!` is banned), release
-builds abort on a panic, and integer overflow is checked. An assertion turns a catastrophic
-correctness bug into a crash, which is found sooner and costs less, and it gives fuzzing something
-to find.
+builds abort on a panic, and integer overflow is checked in the workspace crates. An assertion turns
+a catastrophic correctness bug into a crash, which is found sooner and costs less, and it gives
+fuzzing something to find.
 
 - **Assert every argument, return value, precondition, postcondition and invariant.** A function
   does not operate on data it has not checked. The code averages at least **two assertions per

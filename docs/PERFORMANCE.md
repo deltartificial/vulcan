@@ -121,7 +121,8 @@ These are rules for every hot path, not modules. Reviewers (human or AI) should 
   safe Rust.
 - Memory is allocated at start-up and the allocator is then sealed: every collection of `vulcan`
   takes its capacity when it is created and asserts that it never grows past it.
-- Release builds abort on a panic and check integer overflow. A failed assertion means the program
-  state is wrong, and unwinding through code that relied on it is not safe.
+- Release builds abort on a panic and check integer overflow in the workspace crates; third-party
+  crates keep the release semantics they are tested with. A failed assertion means the program state
+  is wrong, and unwinding through code that relied on it is not safe.
 - Nightly fast paths use a `--cfg` flag rather than a Cargo feature, so CI jobs that build with
   `--all-features` on stable keep working.
