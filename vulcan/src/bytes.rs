@@ -308,14 +308,70 @@ impl<'input> Cursor<'input> {
 ///
 /// The hot loop of [`Cursor::eat_while`], over a plain slice so the compiler need not prove that
 /// the cursor stays unchanged while the predicate runs.
+///
+/// Eight bytes per iteration: the counter update and the loop branch are shared by eight bytes,
+/// and a run still stops at its first failing byte, so a short one (a single space) costs no
+/// extra lookup.
 #[inline]
 fn cursor_eat_while_length<Predicate>(bytes: &[u8], mut predicate: Predicate) -> usize
 where
     Predicate: FnMut(u8) -> bool,
 {
-    let length = bytes.iter().position(|&byte| !predicate(byte)).map_or(bytes.len(), |index| index);
+    let (octets, rest) = bytes.as_chunks::<8>();
+    let mut length = 0_usize;
+    for &octet in octets {
+        let matched = cursor_eat_while_length_octet(octet, &mut predicate);
+        if matched < 8 {
+            return length + matched;
+        }
+        length += 8;
+    }
+    let (pairs, tail) = rest.as_chunks::<2>();
+    for &pair in pairs {
+        let matched = cursor_eat_while_pair(pair, &mut predicate);
+        if matched < 2 {
+            return length + matched;
+        }
+        length += 2;
+    }
+    if let Some(&last) = tail.first() {
+        if predicate(last) {
+            length += 1;
+        }
+    }
     assert!(length <= bytes.len(), "the matched prefix lies in the bytes");
     length
+}
+
+/// Returns how many of the eight bytes of `octet`, from the first, satisfy `predicate`.
+#[inline]
+fn cursor_eat_while_length_octet<Predicate>(octet: [u8; 8], predicate: &mut Predicate) -> usize
+where
+    Predicate: FnMut(u8) -> bool,
+{
+    let [byte_0, byte_1, byte_2, byte_3, byte_4, byte_5, byte_6, byte_7] = octet;
+    let mut matched = 0_usize;
+    for pair in [[byte_0, byte_1], [byte_2, byte_3], [byte_4, byte_5], [byte_6, byte_7]] {
+        let pair_matched = cursor_eat_while_pair(pair, predicate);
+        matched += pair_matched;
+        if pair_matched < 2 {
+            break;
+        }
+    }
+    assert!(matched <= octet.len(), "at most the whole octet matches");
+    matched
+}
+
+/// Returns how many of the two bytes of `pair`, from the first, satisfy `predicate`.
+#[inline]
+fn cursor_eat_while_pair<Predicate>(pair: [u8; 2], predicate: &mut Predicate) -> usize
+where
+    Predicate: FnMut(u8) -> bool,
+{
+    let [first, second] = pair;
+    let matched = if predicate(first) { if predicate(second) { 2 } else { 1 } } else { 0 };
+    assert!(matched <= pair.len(), "at most the whole pair matches");
+    matched
 }
 
 /// A substring searcher for a fixed needle, built on first use and then shared.
