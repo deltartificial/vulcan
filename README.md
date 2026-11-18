@@ -1,12 +1,15 @@
 # Vulcan
 
-Ultra-strict, performance-first Rust workspace template for systems where every microsecond and
-every allocation counts: financial infrastructure, high-frequency trading, blockchain, and
-compilers. Its coding rules are a Rust adaptation of [TigerStyle], the style guide of the
-[TigerBeetle] financial transactions database. Built for AI-assisted development.
+Ultra-strict, performance-first Rust workspace template for financial and blockchain systems, and
+any code where every microsecond and every allocation counts.
+
+**[TigerStyle], enforced.** Vulcan takes the coding rules of the [TigerBeetle] database, translates
+them to Rust, and turns every rule a tool can see into a lint or a check. Built for AI-assisted
+development.
 
 [TigerStyle]: https://github.com/tigerbeetle/tigerbeetle/blob/main/docs/TIGER_STYLE.md
 [TigerBeetle]: https://github.com/tigerbeetle/tigerbeetle
+[Power of Ten]: https://spinroot.com/gerard/pdf/P10.pdf
 
 ## Who This Is For
 
@@ -35,10 +38,11 @@ Traditional Rust projects balance strictness with flexibility. Vulcan enforces a
 pattern to prevent AI from generating inconsistent code, and ships the building blocks to make that
 code fast.
 
-The rules come from [TigerStyle], the style guide [TigerBeetle] wrote for a database where a wrong
-balance is not an option, itself built on NASA's
-[Power of Ten](https://spinroot.com/gerard/pdf/P10.pdf). Vulcan translates them to Rust and enforces
-each one with a lint or a check wherever a tool can.
+The rules start from [TigerStyle], the style TigerBeetle wrote for a financial transactions database
+that must never lose or corrupt a balance, itself grounded in NASA's [Power of Ten] rules for
+safety-critical code. Where TigerStyle relies on discipline, Vulcan relies on tools: each rule is a
+rustc or clippy lint, a `cargo xtask style` check, or, when no tool can see it, a review item in
+[docs/CODING.md](docs/CODING.md).
 
 Key principles, in priority order: safety, then performance, then developer experience.
 
@@ -231,6 +235,11 @@ cargo xtask maxperf-nightly  # maxperf with nightly fast paths
 Commit format: `type(scope): description`, with a body that says what changed and why.
 
 Types: `feat`, `fix`, `chore`, `test`, `bench`, `perf`, `refactor`, `docs`, `ci`, `revert`, `deps`
+
+## Credits
+
+- [TigerStyle] and [TigerBeetle], for the rules this template enforces
+- Gerard J. Holzmann, for NASA's [Power of Ten]
 
 ## License
 
