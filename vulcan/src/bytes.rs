@@ -362,9 +362,13 @@ impl StaticFinder {
     #[inline]
     #[must_use = "an accessor has no side effect"]
     pub fn get(&self) -> &memmem::Finder<'static> {
-        let finder = self.finder.get_or_init(|| build_finder(self.needle));
-        assert!(finder.needle() == self.needle, "the searcher was built for this needle");
-        finder
+        // The needle is checked once, where the searcher is built: checking it on every call
+        // would cost a byte compare per search, in the loop the searcher was built for.
+        self.finder.get_or_init(|| {
+            let finder = build_finder(self.needle);
+            assert!(finder.needle() == self.needle, "the searcher was built for this needle");
+            finder
+        })
     }
 }
 
