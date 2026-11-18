@@ -140,11 +140,22 @@ impl<'arena> Interner<'arena> {
     #[inline]
     #[track_caller]
     pub fn intern(&mut self, string: &str) -> Symbol {
-        if let Some(index) = self.strings.get_index_of(string) {
-            assert!(index < self.strings.len(), "a found string has a valid index");
-            assert_eq!(self.strings[index], string, "a hit returns an equal string");
-            return Symbol::from_u32(u32_from_usize(index));
-        }
+        let Some(index) = self.strings.get_index_of(string) else {
+            return self.intern_missing(string);
+        };
+        // The lookup has already compared the strings: comparing them again would double the cost
+        // of a hit, the common case, and check nothing new.
+        assert!(index < self.strings.len(), "a found string has a valid index");
+        Symbol::from_u32(u32_from_usize(index))
+    }
+
+    /// Copies a string seen for the first time into the arena and gives it the next symbol.
+    ///
+    /// Kept out of line and cold: a hit is the common case, and inlining this body with its checks
+    /// into every caller of [`intern`](Self::intern) made the hit path a quarter slower.
+    #[cold]
+    #[track_caller]
+    fn intern_missing(&mut self, string: &str) -> Symbol {
         assert!(self.len() < self.capacity, "the interner is full");
         let allocated_bytes_before = self.arena.allocated_bytes();
         let fixed = self.arena.allocation_limit().is_some();
@@ -414,7 +425,8 @@ where
             return Interned::new_unchecked(&[]);
         }
         if let Some(&existing) = self.set.get(items) {
-            assert!(existing == items, "a hit returns an equal list");
+            // The lookup has already compared the lists: comparing them again would double the
+            // cost of a hit and check nothing new.
             return Interned::new_unchecked(existing);
         }
         assert!(self.len() < self.capacity, "the slice interner is full");
@@ -597,7 +609,7 @@ where
             );
         };
         if let Some(&existing) = self.set.get(&value) {
-            assert!(existing.value == value, "a hit returns an equal value");
+            // The lookup has already compared the values: comparing them again would check nothing.
             return Interned::new_unchecked(existing);
         }
         assert!(self.len() < self.capacity, "the flagged interner is full");

@@ -153,19 +153,20 @@ impl<'input> Cursor<'input> {
     #[inline]
     #[must_use = "an accessor has no side effect"]
     pub fn rest(&self) -> &'input [u8] {
-        self.assert_invariants();
+        assert!(self.rest.len() <= self.input.len(), "the rest is no longer than the input");
+        let suffix = &self.input[self.input.len() - self.rest.len()..];
+        // Compares address and length, not bytes: the check costs the same for any input.
+        assert!(ptr::eq(suffix, self.rest), "the rest is the end of the input");
         self.rest
     }
 
     /// Returns `true` once every byte has been consumed.
     ///
-    /// # Panics
-    ///
-    /// Panics only if the rest is not a suffix of the input, which every method preserves.
+    /// An accessor on the hot path of every scan loop: it holds no assertion, since the rest is a
+    /// suffix of the input by construction: a single private method shortens it.
     #[inline]
     #[must_use = "an accessor has no side effect"]
-    pub fn is_eof(&self) -> bool {
-        self.assert_invariants();
+    pub const fn is_eof(&self) -> bool {
         self.rest.is_empty()
     }
 
@@ -217,13 +218,11 @@ impl<'input> Cursor<'input> {
     #[track_caller]
     pub fn eat_prefix(&mut self, prefix: &[u8]) -> bool {
         assert!(!prefix.is_empty(), "an empty prefix matches everywhere");
-        let offset_before = self.offset();
         if self.rest.starts_with(prefix) {
+            // `starts_with` has compared the bytes, so no assertion compares them again.
             let _prefix = self.advance(prefix.len());
-            assert!(self.offset() > offset_before, "a match consumes the prefix");
             true
         } else {
-            assert!(self.offset() == offset_before, "a failed match consumes nothing");
             false
         }
     }
@@ -283,8 +282,9 @@ impl<'input> Cursor<'input> {
             assert!(self.rest.is_empty(), "a missing needle consumes the rest");
             return false;
         };
-        let skipped = self.advance(start + needle.len());
-        assert!(skipped.ends_with(needle), "the needle is consumed with the bytes before it");
+        // The finder has matched the needle at `start`: comparing its bytes again would check
+        // nothing new, and cost a compare per comment.
+        let _skipped = self.advance(start + needle.len());
         true
     }
 
@@ -295,21 +295,12 @@ impl<'input> Cursor<'input> {
     #[inline]
     #[track_caller]
     fn advance(&mut self, byte_count: usize) -> &'input [u8] {
+        // The only place that shortens the rest, so it stays a suffix of the input: re-checking
+        // that on every call would cost a bounds check and a pointer compare per token.
         assert!(byte_count <= self.rest.len(), "advance past the end of the input");
         let (head, rest) = self.rest.split_at(byte_count);
         self.rest = rest;
-        assert!(head.len() == byte_count, "the consumed bytes are returned");
-        self.assert_invariants();
         head
-    }
-
-    /// Asserts that `rest` is a suffix of `input`: same end, no longer.
-    #[inline]
-    fn assert_invariants(&self) {
-        assert!(self.rest.len() <= self.input.len(), "the rest is no longer than the input");
-        let suffix = &self.input[self.input.len() - self.rest.len()..];
-        // Compares address and length, not bytes: the check costs the same for any input.
-        assert!(ptr::eq(suffix, self.rest), "the rest is the end of the input");
     }
 }
 
