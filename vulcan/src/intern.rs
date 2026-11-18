@@ -45,12 +45,12 @@ use core::{
     borrow::Borrow,
     cmp::Ordering,
     fmt,
-    hash::{Hash, Hasher},
+    hash::{BuildHasher as _, Hash, Hasher},
     mem,
     ops::Deref,
     ptr,
 };
-use indexmap::IndexSet;
+use hashbrown::HashTable;
 use rustc_hash::{FxBuildHasher, FxHashSet};
 
 crate::newtype_index! {
@@ -71,17 +71,29 @@ const _: () =
 
 /// A string interner that maps each distinct string to a [`Symbol`].
 ///
-/// The strings live in a borrowed arena, and an insertion-ordered set with the `FxHash` hasher
-/// (fast on short keys like identifiers) indexes them, so a symbol is the string's position in
-/// the set and resolving it is an index.
+/// The strings live in a borrowed arena. A hash table with the `FxHash` hasher (fast on short keys
+/// like identifiers) maps each string to its symbol, and stores both in the same slot, so a hit
+/// reads the slot and the string and nothing in between. A list in insertion order maps a symbol
+/// back to its string, so resolving it is an index.
 #[derive(Debug, Clone)]
 pub struct Interner<'arena> {
     /// The arena that holds the bytes of every string.
     arena: &'arena Bump,
-    /// The interned strings, in insertion order.
-    strings: IndexSet<&'arena str, FxBuildHasher>,
+    /// Each interned string with its symbol, for lookups.
+    table: HashTable<InternerEntry<'arena>>,
+    /// The interned strings, in insertion order: the string of a symbol is at its index.
+    strings: Vec<&'arena str>,
     /// The number of distinct strings the interner may hold.
     capacity: u32,
+}
+
+/// A slot of the table of an [`Interner`]: a string and the symbol it was given.
+#[derive(Debug, Clone, Copy)]
+struct InternerEntry<'arena> {
+    /// The interned string, in the arena.
+    string: &'arena str,
+    /// The symbol of `string`, its index in the list of strings.
+    symbol: Symbol,
 }
 
 impl<'arena> Interner<'arena> {
@@ -94,13 +106,11 @@ impl<'arena> Interner<'arena> {
     #[must_use = "an interner that is never used wastes its allocation"]
     pub fn with_capacity(arena: &'arena Bump, capacity: u32) -> Self {
         assert!(capacity > 0, "an interner needs a capacity of at least one string");
-        let strings = IndexSet::with_capacity_and_hasher(usize_from_u32(capacity), FxBuildHasher);
-        assert!(
-            strings.capacity() >= usize_from_u32(capacity),
-            "the allocation covers the capacity"
-        );
-        assert!(strings.is_empty(), "a new interner holds no string");
-        Self { arena, strings, capacity }
+        let table = HashTable::with_capacity(usize_from_u32(capacity));
+        let strings = Vec::with_capacity(usize_from_u32(capacity));
+        assert!(table.capacity() >= usize_from_u32(capacity), "the table covers the capacity");
+        assert!(strings.capacity() >= usize_from_u32(capacity), "the list covers the capacity");
+        Self { arena, table, strings, capacity }
     }
 
     /// Creates an interner for `capacity` strings, pre-filled with `strings`, so that well-known
@@ -140,13 +150,14 @@ impl<'arena> Interner<'arena> {
     #[inline]
     #[track_caller]
     pub fn intern(&mut self, string: &str) -> Symbol {
-        let Some(index) = self.strings.get_index_of(string) else {
-            return self.intern_missing(string);
+        let hash = FxBuildHasher.hash_one(string);
+        let Some(entry) = self.table.find(hash, |entry| entry.string == string) else {
+            return self.intern_missing(string, hash);
         };
         // The lookup has already compared the strings: comparing them again would double the cost
         // of a hit, the common case, and check nothing new.
-        assert!(index < self.strings.len(), "a found string has a valid index");
-        Symbol::from_u32(u32_from_usize(index))
+        assert!(entry.symbol.as_u32() < self.capacity, "a found symbol lies within the capacity");
+        entry.symbol
     }
 
     /// Copies a string seen for the first time into the arena and gives it the next symbol.
@@ -155,7 +166,7 @@ impl<'arena> Interner<'arena> {
     /// into every caller of [`intern`](Self::intern) made the hit path a quarter slower.
     #[cold]
     #[track_caller]
-    fn intern_missing(&mut self, string: &str) -> Symbol {
+    fn intern_missing(&mut self, string: &str, hash: u64) -> Symbol {
         assert!(self.len() < self.capacity, "the interner is full");
         let allocated_bytes_before = self.arena.allocated_bytes();
         let fixed = self.arena.allocation_limit().is_some();
@@ -171,27 +182,34 @@ impl<'arena> Interner<'arena> {
                 "the arena never grows"
             );
         }
-        let allocation_before = self.strings.capacity();
-        let (index, inserted) = self.strings.insert_full(stored);
-        assert!(inserted, "a string missing from the set is inserted");
-        assert_eq!(index + 1, self.strings.len(), "a new string goes last");
-        assert_eq!(self.strings.capacity(), allocation_before, "the table never reallocates");
-        Symbol::from_u32(u32_from_usize(index))
+        let symbol = Symbol::from_u32(u32_from_usize(self.strings.len()));
+        let table_capacity_before = self.table.capacity();
+        let strings_capacity_before = self.strings.capacity();
+        self.strings.push(stored);
+        let _slot =
+            self.table.insert_unique(hash, InternerEntry { string: stored, symbol }, |entry| {
+                FxBuildHasher.hash_one(entry.string)
+            });
+        assert_eq!(self.table.len(), self.strings.len(), "one slot per string");
+        assert_eq!(self.table.capacity(), table_capacity_before, "the table never reallocates");
+        assert_eq!(self.strings.capacity(), strings_capacity_before, "the list never reallocates");
+        symbol
     }
 
     /// Returns the symbol for `string` if it was already interned.
     ///
     /// # Panics
     ///
-    /// Panics if the table reports an index past its length, a broken invariant.
+    /// Panics if the table and the list disagree on a symbol, a broken invariant.
     #[inline]
     #[must_use = "a lookup has no side effect"]
     pub fn get(&self, string: &str) -> Option<Symbol> {
-        let index = self.strings.get_index_of(string)?;
-        assert!(index < self.strings.len(), "a found string has a valid index");
-        let symbol = Symbol::from_u32(u32_from_usize(index));
-        assert!(symbol.as_u32() < self.capacity, "a symbol lies within the capacity");
-        Some(symbol)
+        let hash = FxBuildHasher.hash_one(string);
+        let entry = self.table.find(hash, |entry| entry.string == string)?;
+        let index = usize_from_u32(entry.symbol.as_u32());
+        assert!(index < self.strings.len(), "a found symbol has a string");
+        assert!(ptr::eq(self.strings[index], entry.string), "the symbol indexes its own string");
+        Some(entry.symbol)
     }
 
     /// Returns the string behind `symbol`.
@@ -234,8 +252,12 @@ impl<'arena> Interner<'arena> {
     pub fn capacity(&self) -> u32 {
         assert!(self.capacity > 0, "the capacity was checked at construction");
         assert!(
-            self.strings.capacity() >= usize_from_u32(self.capacity),
+            self.table.capacity() >= usize_from_u32(self.capacity),
             "the table keeps its allocation"
+        );
+        assert!(
+            self.strings.capacity() >= usize_from_u32(self.capacity),
+            "the list keeps its allocation"
         );
         self.capacity
     }
