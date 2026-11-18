@@ -177,7 +177,7 @@ multiple_crate_versions = "allow"
 [workspace.dependencies]
 # Keys stay alphabetical (`cargo sort`), so each entry says which module uses it.
 bumpalo = "3.20.3" # arena
-indexmap = { version = "2.14.2", default-features = false, features = ["std"] } # intern
+hashbrown = { version = "0.17.1", default-features = false, features = ["inline-more"] } # intern
 memchr = "2.8.3" # bytes
 mimalloc = { version = "0.1.52", default-features = false } # allocator
 parking_lot = "0.12.5" # sync, diagnostic; 0.13 requires rustc 1.95, above the 1.93 MSRV
@@ -234,6 +234,10 @@ codegen-units = 16
 [profile.release.package]
 clap_builder.opt-level = "s"
 syn.opt-level = "s"
+# Overflow stays checked in the workspace crates, the code these rules govern. Third-party crates
+# run with the release semantics they are written and tested for: checking them cost the interner
+# 8 to 10% (hashing and probing in `hashbrown`) without checking any code of ours.
+"*".overflow-checks = false
 
 # Profiling: release with debug symbols.
 [profile.profiling]

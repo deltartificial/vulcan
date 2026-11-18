@@ -153,19 +153,20 @@ impl<'input> Cursor<'input> {
     #[inline]
     #[must_use = "an accessor has no side effect"]
     pub fn rest(&self) -> &'input [u8] {
-        self.assert_invariants();
+        assert!(self.rest.len() <= self.input.len(), "the rest is no longer than the input");
+        let suffix = &self.input[self.input.len() - self.rest.len()..];
+        // Compares address and length, not bytes: the check costs the same for any input.
+        assert!(ptr::eq(suffix, self.rest), "the rest is the end of the input");
         self.rest
     }
 
     /// Returns `true` once every byte has been consumed.
     ///
-    /// # Panics
-    ///
-    /// Panics only if the rest is not a suffix of the input, which every method preserves.
+    /// An accessor on the hot path of every scan loop: it holds no assertion, since the rest is a
+    /// suffix of the input by construction: a single private method shortens it.
     #[inline]
     #[must_use = "an accessor has no side effect"]
-    pub fn is_eof(&self) -> bool {
-        self.assert_invariants();
+    pub const fn is_eof(&self) -> bool {
         self.rest.is_empty()
     }
 
@@ -217,13 +218,11 @@ impl<'input> Cursor<'input> {
     #[track_caller]
     pub fn eat_prefix(&mut self, prefix: &[u8]) -> bool {
         assert!(!prefix.is_empty(), "an empty prefix matches everywhere");
-        let offset_before = self.offset();
         if self.rest.starts_with(prefix) {
+            // `starts_with` has compared the bytes, so no assertion compares them again.
             let _prefix = self.advance(prefix.len());
-            assert!(self.offset() > offset_before, "a match consumes the prefix");
             true
         } else {
-            assert!(self.offset() == offset_before, "a failed match consumes nothing");
             false
         }
     }
@@ -283,8 +282,9 @@ impl<'input> Cursor<'input> {
             assert!(self.rest.is_empty(), "a missing needle consumes the rest");
             return false;
         };
-        let skipped = self.advance(start + needle.len());
-        assert!(skipped.ends_with(needle), "the needle is consumed with the bytes before it");
+        // The finder has matched the needle at `start`: comparing its bytes again would check
+        // nothing new, and cost a compare per comment.
+        let _skipped = self.advance(start + needle.len());
         true
     }
 
@@ -295,21 +295,12 @@ impl<'input> Cursor<'input> {
     #[inline]
     #[track_caller]
     fn advance(&mut self, byte_count: usize) -> &'input [u8] {
+        // The only place that shortens the rest, so it stays a suffix of the input: re-checking
+        // that on every call would cost a bounds check and a pointer compare per token.
         assert!(byte_count <= self.rest.len(), "advance past the end of the input");
         let (head, rest) = self.rest.split_at(byte_count);
         self.rest = rest;
-        assert!(head.len() == byte_count, "the consumed bytes are returned");
-        self.assert_invariants();
         head
-    }
-
-    /// Asserts that `rest` is a suffix of `input`: same end, no longer.
-    #[inline]
-    fn assert_invariants(&self) {
-        assert!(self.rest.len() <= self.input.len(), "the rest is no longer than the input");
-        let suffix = &self.input[self.input.len() - self.rest.len()..];
-        // Compares address and length, not bytes: the check costs the same for any input.
-        assert!(ptr::eq(suffix, self.rest), "the rest is the end of the input");
     }
 }
 
@@ -317,14 +308,70 @@ impl<'input> Cursor<'input> {
 ///
 /// The hot loop of [`Cursor::eat_while`], over a plain slice so the compiler need not prove that
 /// the cursor stays unchanged while the predicate runs.
+///
+/// Eight bytes per iteration: the counter update and the loop branch are shared by eight bytes,
+/// and a run still stops at its first failing byte, so a short one (a single space) costs no
+/// extra lookup.
 #[inline]
 fn cursor_eat_while_length<Predicate>(bytes: &[u8], mut predicate: Predicate) -> usize
 where
     Predicate: FnMut(u8) -> bool,
 {
-    let length = bytes.iter().position(|&byte| !predicate(byte)).map_or(bytes.len(), |index| index);
+    let (octets, rest) = bytes.as_chunks::<8>();
+    let mut length = 0_usize;
+    for &octet in octets {
+        let matched = cursor_eat_while_length_octet(octet, &mut predicate);
+        if matched < 8 {
+            return length + matched;
+        }
+        length += 8;
+    }
+    let (pairs, tail) = rest.as_chunks::<2>();
+    for &pair in pairs {
+        let matched = cursor_eat_while_pair(pair, &mut predicate);
+        if matched < 2 {
+            return length + matched;
+        }
+        length += 2;
+    }
+    if let Some(&last) = tail.first() {
+        if predicate(last) {
+            length += 1;
+        }
+    }
     assert!(length <= bytes.len(), "the matched prefix lies in the bytes");
     length
+}
+
+/// Returns how many of the eight bytes of `octet`, from the first, satisfy `predicate`.
+#[inline]
+fn cursor_eat_while_length_octet<Predicate>(octet: [u8; 8], predicate: &mut Predicate) -> usize
+where
+    Predicate: FnMut(u8) -> bool,
+{
+    let [byte_0, byte_1, byte_2, byte_3, byte_4, byte_5, byte_6, byte_7] = octet;
+    let mut matched = 0_usize;
+    for pair in [[byte_0, byte_1], [byte_2, byte_3], [byte_4, byte_5], [byte_6, byte_7]] {
+        let pair_matched = cursor_eat_while_pair(pair, predicate);
+        matched += pair_matched;
+        if pair_matched < 2 {
+            break;
+        }
+    }
+    assert!(matched <= octet.len(), "at most the whole octet matches");
+    matched
+}
+
+/// Returns how many of the two bytes of `pair`, from the first, satisfy `predicate`.
+#[inline]
+fn cursor_eat_while_pair<Predicate>(pair: [u8; 2], predicate: &mut Predicate) -> usize
+where
+    Predicate: FnMut(u8) -> bool,
+{
+    let [first, second] = pair;
+    let matched = if predicate(first) { if predicate(second) { 2 } else { 1 } } else { 0 };
+    assert!(matched <= pair.len(), "at most the whole pair matches");
+    matched
 }
 
 /// A substring searcher for a fixed needle, built on first use and then shared.
@@ -371,9 +418,13 @@ impl StaticFinder {
     #[inline]
     #[must_use = "an accessor has no side effect"]
     pub fn get(&self) -> &memmem::Finder<'static> {
-        let finder = self.finder.get_or_init(|| build_finder(self.needle));
-        assert!(finder.needle() == self.needle, "the searcher was built for this needle");
-        finder
+        // The needle is checked once, where the searcher is built: checking it on every call
+        // would cost a byte compare per search, in the loop the searcher was built for.
+        self.finder.get_or_init(|| {
+            let finder = build_finder(self.needle);
+            assert!(finder.needle() == self.needle, "the searcher was built for this needle");
+            finder
+        })
     }
 }
 

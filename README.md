@@ -49,7 +49,8 @@ Key principles, in priority order: safety, then performance, then developer expe
 - Assert arguments, results and invariants: two assertions per function on average, in every build
 - Put a limit on everything: no recursion, `for` loops only, fixed-capacity collections
 - Allocate at start-up, then seal the allocator: a later allocation aborts
-- Crash on a broken invariant: release builds abort on panic and check integer overflow
+- Crash on a broken invariant: release builds abort on panic and check integer overflow in the
+  workspace crates
 - Force simpler code: 70-line functions, shallow nesting, one condition per `if`
 - Ban error handling footguns (`unwrap`, `expect`, `panic`) and ignored results
 - Pass options explicitly: no `Default`, named arguments, enums instead of `bool` arguments
@@ -213,13 +214,13 @@ Build jobs use kache and the mold linker; `lint` and `test` end with an alls-gre
 
 ## Build Profiles
 
-| Profile     | Use Case                                               |
-| ----------- | ------------------------------------------------------ |
-| `dev`       | Fast iteration with optimized dependencies             |
-| `release`   | Optimized; `panic = "abort"`, integer overflow checked |
-| `maxperf`   | Distribution binary (fat LTO, codegen-units=1)         |
-| `profiling` | Release with debug symbols                             |
-| `bench`     | Benchmarking                                           |
+| Profile     | Use Case                                                        |
+| ----------- | --------------------------------------------------------------- |
+| `dev`       | Fast iteration with optimized dependencies                      |
+| `release`   | Optimized; `panic = "abort"`, overflow checked in the workspace |
+| `maxperf`   | Distribution binary (fat LTO, codegen-units=1)                  |
+| `profiling` | Release with debug symbols                                      |
+| `bench`     | Benchmarking                                                    |
 
 ## Development
 
