@@ -25,7 +25,7 @@ jobs:
         permissions:
             contents: read
         steps:
-            - uses: actions/checkout@v4
+            - uses: actions/checkout@v7
               with:
                   persist-credentials: false
             - uses: dtolnay/rust-toolchain@nightly
@@ -49,7 +49,7 @@ jobs:
         permissions:
             contents: read
         steps:
-            - uses: actions/checkout@v4
+            - uses: actions/checkout@v7
               with:
                   persist-credentials: false
             - uses: dtolnay/rust-toolchain@nightly
@@ -64,7 +64,7 @@ jobs:
         permissions:
             contents: read
         steps:
-            - uses: actions/checkout@v4
+            - uses: actions/checkout@v7
               with:
                   persist-credentials: false
             - uses: dtolnay/rust-toolchain@nightly
@@ -84,7 +84,7 @@ jobs:
         permissions:
             contents: read
         steps:
-            - uses: actions/checkout@v4
+            - uses: actions/checkout@v7
               with:
                   persist-credentials: false
             - uses: dtolnay/rust-toolchain@stable
@@ -101,7 +101,7 @@ jobs:
         permissions:
             contents: read
         steps:
-            - uses: actions/checkout@v4
+            - uses: actions/checkout@v7
               with:
                   persist-credentials: false
             - uses: crate-ci/typos@v1
@@ -113,7 +113,7 @@ jobs:
         permissions:
             contents: read
         steps:
-            - uses: actions/checkout@v4
+            - uses: actions/checkout@v7
               with:
                   persist-credentials: false
             - uses: EmbarkStudios/cargo-deny-action@v2
@@ -125,10 +125,10 @@ jobs:
         permissions:
             contents: read
         steps:
-            - uses: actions/checkout@v4
+            - uses: actions/checkout@v7
               with:
                   persist-credentials: false
-            - uses: dprint/check@v2.2
+            - uses: dprint/check@v2.6
 
     udeps:
         name: udeps
@@ -137,7 +137,7 @@ jobs:
         permissions:
             contents: read
         steps:
-            - uses: actions/checkout@v4
+            - uses: actions/checkout@v7
               with:
                   persist-credentials: false
             - uses: dtolnay/rust-toolchain@nightly
@@ -158,7 +158,7 @@ jobs:
         permissions:
             contents: read
         steps:
-            - uses: actions/checkout@v4
+            - uses: actions/checkout@v7
               with:
                   persist-credentials: false
             - uses: dtolnay/rust-toolchain@stable
@@ -179,7 +179,7 @@ jobs:
         permissions:
             contents: read
         steps:
-            - uses: actions/checkout@v4
+            - uses: actions/checkout@v7
               with:
                   persist-credentials: false
             - uses: dtolnay/rust-toolchain@stable
@@ -193,7 +193,7 @@ jobs:
         permissions:
             contents: read
         steps:
-            - uses: actions/checkout@v4
+            - uses: actions/checkout@v7
               with:
                   persist-credentials: false
             - uses: dtolnay/rust-toolchain@stable
@@ -211,7 +211,7 @@ jobs:
         permissions:
             contents: read
         steps:
-            - uses: actions/checkout@v4
+            - uses: actions/checkout@v7
               with:
                   persist-credentials: false
             - uses: dtolnay/rust-toolchain@stable
@@ -225,7 +225,7 @@ jobs:
         permissions:
             contents: read
         steps:
-            - uses: actions/checkout@v4
+            - uses: actions/checkout@v7
               with:
                   persist-credentials: false
             - uses: dtolnay/rust-toolchain@stable
@@ -243,7 +243,7 @@ jobs:
         permissions:
             contents: read
         steps:
-            - uses: actions/checkout@v4
+            - uses: actions/checkout@v7
               with:
                   persist-credentials: false
             - uses: dtolnay/rust-toolchain@stable
@@ -256,7 +256,7 @@ jobs:
         permissions:
             contents: read
         steps:
-            - uses: actions/checkout@v4
+            - uses: actions/checkout@v7
               with:
                   persist-credentials: false
             - uses: dtolnay/rust-toolchain@nightly
@@ -274,7 +274,7 @@ jobs:
         permissions:
             contents: read
         steps:
-            - uses: actions/checkout@v4
+            - uses: actions/checkout@v7
               with:
                   persist-credentials: false
             - uses: dtolnay/rust-toolchain@nightly
@@ -297,7 +297,7 @@ jobs:
         env:
             RUSTFLAGS: --cfg vulcan_nightly --deny warnings
         steps:
-            - uses: actions/checkout@v4
+            - uses: actions/checkout@v7
               with:
                   persist-credentials: false
             - uses: dtolnay/rust-toolchain@nightly
@@ -320,7 +320,7 @@ jobs:
         permissions:
             contents: read
         steps:
-            - uses: actions/checkout@v4
+            - uses: actions/checkout@v7
               with:
                   persist-credentials: false
                   # The whole history, so `origin/main..HEAD` lists the commits of the branch.
